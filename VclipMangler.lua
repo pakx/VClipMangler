@@ -1,7 +1,7 @@
 local app = {
     extensionMeta = {
         title = "VclipMangler"
-        , version = "0.1.0"
+        , version = "0.2.0"
         , author = "pakx"
         , url = "https://github.com/pakx/VclipMangler"
         , shortdesc = "Manage Virtual Clips"
