@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 484 151" version="1.1"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve"
+    xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+    <style type="text/css"><![CDATA[
+    .F{font-family:'ArialMT', 'Arial', sans-serif;font-size:10px;}
+    .L{fill:none;stroke:#000;stroke-width:0.75px;}
+    .BG{fill:#F0F0F0;stroke:none;}
+    .TB{fill:#FFF;stroke:#7A7A7A;stroke-width:0.75px;}
+    .CTL{fill:#E1E1E1;stroke:#ADADAD;stroke-width:0.75px;}
+]]></style>
+    <rect x="0" y="0" width="483" height="152" class="BG"/>
+
+    <rect x="192.875" y="56.721" width="115" height="16.5" class="CTL"/>
+    <path d="M300.034,68.782l3.308,-5.673l-6.615,-0l3.307,5.673Z" style="stroke:#000;stroke-width:0.75px;"/>
+
+
+
+    <rect x="314.625" y="57.596" width="97.5" height="16.5" class="TB"/>
+    <rect x="314.625" y="79.907" width="97.5" height="16.5" class="CTL"/>
+    <rect x="314.625" y="100.407" width="97.5" height="16.5" class="CTL"/>
+    <rect x="314.625" y="122.407" width="97.5" height="16.5" class="CTL"/>
+    <rect x="193.592" y="79.907" width="54" height="16.5" class="CTL"/>
+    <rect x="254.092" y="79.907" width="54" height="16.5" class="CTL"/>
+
+    <rect x="254.092" y="100.407" width="54" height="16.5" class="CTL"/>
+    <rect x="254.092" y="122.407" width="54" height="16.5" class="CTL"/>
+    <rect x="193.592" y="100.407" width="54" height="16.5" class="CTL"/>
+    <rect x="193.592" y="122.407" width="54" height="16.5" class="CTL"/>
+    <rect x="418.125" y="15.471" width="54.75" height="14.25" class="CTL"/>
+    <rect x="419.625" y="58.971" width="54.75" height="14.25" class="CTL"/>
+    <rect x="70.092" y="79.907" width="117" height="16.5" class="TB"/>
+    <rect x="70.092" y="100.407" width="117" height="16.5" class="TB"/>
+    <rect x="70.092" y="122.407" width="117" height="16.5" class="CTL"/>
+    <rect x="10.125" y="15.471" width="53.25" height="15.75" class="CTL"/>
+    <rect x="10.125" y="81.471" width="53.25" height="15.75" class="CTL"/>
+    <rect x="10.125" y="103.221" width="53.25" height="15.75" class="CTL"/>
+    <rect x="10.125" y="122.782" width="53.25" height="15.75" class="CTL"/>
+    <rect x="69.375" y="37.971" width="403.5" height="13.5" class="TB"/>
+
+    <path d="M10.125,148.407l463.467,-0" class="L"/>
+    <path d="M69.125,5.077l404.467,0" class="L"/>    
+    <path d="M0,0l0,150.75" class="L"/>
+    <path d="M483.75,0l0,150.75" class="L"/>
+
+    <text x="278.461px" y="111.868px" class="F">-</text>
+    <text x="218.899px" y="111.868px" class="F">-</text>
+    <text x="278.461px" y="91.803px" class="F">+</text>
+    <text x="218.899px" y="91.803px" class="F">+</text>
+    <text x="9.354px" y="9.649px" class="F">Clip</text>
+    <text x="437.438px" y="69.925px" class="F">Set</text>
+    <text x="437.438px" y="27.586px" class="F">Play</text>
+    <text x="351.688px" y="91.925px" class="F">Seek</text>
+    <text x="351.688px" y="111.925px" class="F">Seek</text>
+    <text x="355.438px" y="134.184px" class="F">Add</text>
+    <text x="206.711px" y="134.184px" class="F">Select</text>
+    <text x="117.461px" y="134.184px" class="F">New</text>
+    <text x="26.711px" y="134.184px" class="F">Play</text>
+    <text x="14.711px" y="114.184px" class="F">Stop-time</text>
+    <text x="14.711px" y="92.684px" class="F">Start-time</text>
+    <text x="21.461px" y="26.714px" class="F">Media</text>
+    <text x="264.211px" y="134.184px" class="F">Update</text>
+    <text x="9.593px" y="48.116px" class="F">Clip title:</text>
+    <text x="9.593px" y="69.616px" class="F">Group:</text>
+</svg>

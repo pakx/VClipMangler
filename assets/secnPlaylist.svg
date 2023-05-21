@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 484 86" version="1.1"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve"
+    xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+    <style type="text/css"><![CDATA[
+    .BG{fill:#F0F0F0;stroke:none;}
+    .CTL{fill:#E1E1E1;stroke:#ADADAD;stroke-width:0.75px;}
+    .DDA{fill:#000;stroke:#000;stroke-width:0.75px;}
+    .F{font-family:'ArialMT', 'Arial', sans-serif;font-size:10px;}
+    .L{fill:none;stroke:#000;stroke-width:0.75px;}
+    .OF{fill:#f38000;stroke:#f38000;stroke-width:0.75px;}
+]]></style>
+    <rect class="BG" x="0" y="27" width="483" height="57"/>
+    <path id="border" class="L" d="M0.375,81.577l0,-81.577l482.984,0l-0,81.577"/>
+    <g id="titlebar">
+        <path id="sys" class="L" d="M427.411,10.728l0,6.875l6.5,-0l0.25,-6.875l-6.75,-0Zm-33,3.437l6,0m61.5,-3.437l7.25,6.875m0,-6.875l-6.25,6.875"/>
+        <g id="logo">
+            <path d="M9.611,15.662l-1.086,0l-1.029,4.343l10.8,0.073l-0.952,-4.416l-1.239,0c0,0 -1.104,1.741 -2.955,1.773c-2.42,0.043 -3.539,-1.773 -3.539,-1.773Z" class="OF"/>
+            <path d="M9.739,16.11l-0.393,1.517c-0,0 1.039,1.065 3.608,1.015c2.509,-0.05 3.71,-1.326 3.71,-1.326l-0.506,-1.296" style="fill:none;stroke:#ac4000;stroke-width:0.46px;"/>
+            <path d="M11.225,12.048l3.334,-0.028l0.652,2.145l-4.515,-0l0.529,-2.117Z" class="OF"/>
+            <path d="M9.889,15.662l1.855,-6.285m4.25,6.285l-2.04,-6.285" style="fill:none;stroke:#b0b4b7;stroke-width:0.46px;"/>
+            <path d="M12.296,7.307l1.143,0l0.515,2.07l-2.21,-0.001l0.552,-2.069Z" class="OF"/>
+        </g>
+        <text x="21.592px" y="18.407px" class="F">VclipMangler</text>
+    </g>
+
+    <rect x="69.375" y="57.096" width="238.5" height="16.5" id="dd" class="CTL"/>
+    <path d="M300.034,69.296l3.308,-5.673l-6.615,-0l3.307,5.673Z" class="DDA"/>
+    <rect x="314.625" y="34.971" width="97.5" height="16.5" class="CTL"/>
+    <rect x="314.625" y="57.096" width="97.5" height="16.5" class="CTL"/>
+    <rect x="418.125" y="58.221" width="54.75" height="14.25" class="CTL"/>
+
+    <text x="10.081px" y="45.964px" class="F">Playlist</text>
+    <text x="351.688px" y="45.964px" class="F">Save</text>
+    <text x="351.688px" y="68.925px" class="F">Open</text>
+    <text x="437.438px" y="68.92px" class="F">New</text>
+
+    <path d="M15.577,80.768c-1.98,-2.34 -4.56,-1.262 -5.28,0.809" class="L"/>
+    
+    <path d="M17.557,78.869l-0.06,2.708" class="L"/>
+    <path d="M19.777,78.869l-0,0.577" class="L"/>
+    <path d="M19.777,80.511l-0,1.066" class="L"/>
+    <path d="M21.636,81.044l3.601,0" class="L"/>
+
+    <path d="M69.125,81.577l404.467,0" class="CTL"/>
+</svg>

@@ -1282,6 +1282,9 @@ app.genHelpText = function(mdl)
             to indicate selection + edit; here lacking a readily usable click event we
             click the element in the list, then click a Select button to act on it.</p>
             
+            <p> Please file bugs, suggestions, etc at <a href="{=mdl.extensionMeta.url}/issues">
+            {=mdl.extensionMeta.url}/issues</a>
+            
             <p>A short usage guide follows.</p>
 
             <p><span class="secn">Extension settings</span>

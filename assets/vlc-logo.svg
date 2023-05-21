@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 20 24" version="1.1"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve"
+    xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+    <style type="text/css"><![CDATA[
+        .OF{fill:#f38000;stroke:#f38000;stroke-width:0.75px;}
+    ]]></style>
+    <g>
+        <path id="base" class="OF" d="M4.373,15.207l-1.781,0l-1.688,7.125l17.718,0.119l-1.562,-7.244l-2.032,0c0,0 -1.811,2.855 -4.848,2.908c-3.971,0.07 -5.807,-2.908 -5.807,-2.908Z"/>
+        <path d="M4.584,15.941l-0.645,2.489c0,-0 1.705,1.748 5.919,1.665c4.117,-0.082 6.087,-2.175 6.087,-2.175l-0.83,-2.126" style="fill:none;stroke:#ac4000;stroke-width:0.75px;"/>
+        <path id="mid" class="OF" d="M7.021,9.277l5.47,-0.045l1.07,3.518l-7.407,-0l0.867,-3.473Z"/>
+        <path id="rails" d="M4.83,15.207l3.043,-10.312m6.972,10.312l-3.347,-10.312" style="fill:none;stroke:#b0b4b7;stroke-width:0.75px;"/>
+        <path id="tip" class="OF" d="M8.779,1.5l1.875,0l0.844,3.395l-3.625,-0.002l0.906,-3.393Z"/>
+    </g>
+</svg>
