@@ -4,12 +4,10 @@
     
     - uses LuaUnit; ensure it's installed and can be require-d 
       At the time of this writing an easy way to install LuaUnit is
-      to place luaunit.lua in the lua/libs folder
+      to place luaunit.lua in the {lua-installation}/libs folder
       @see: https://github.com/bluebird75/luaunit
       @see: https://luaunit.readthedocs.io/en/latest/
 
-    - move VClipMangler.lua to VLC's extensions folder
-    - set pthVlcExtensions (below) so we can require("VClipMangler")
     - open a command prompt in this folder ("test")
     - run `lua5.1.exe app.lua` (adjust for platform, etc)
 
@@ -29,17 +27,15 @@
 ]] 
 
 
-local pthVlcExtensions = "C:/ProgramFiles/VLCPortable/App/vlc/lua/extensions"
-
 local lu = require("luaunit")
 local ctx = require("_context")
 local utils = require("_utils")
-
-package.path = package.path .. ";" .. pthVlcExtensions .."/?.lua"
+-- get VclipMangler from parent folder
+package.path = package.path .. ";" .. utils.getCurrentDir().."/.." .."/?.lua"
 local app = require("VclipMangler")
 app.context = ctx
 
--- (no more immediately-run code below this line)
+-- ==================== (no more immediately-run code below this line)
 
 function testsA01_createModel()
     local mdl = app.createModel()

@@ -2,6 +2,8 @@
 
 This is a VLC extension to create and manage playlists of virtual clips.
 
+![app screenshot](./assets/screenshot-app.png)
+
 Create/manage m3u playlists of tracks ("clips"), with each clip assigned a title, start/stop times, group, etc.
 
 Clips are "virtual" in that they are just metadata about a section of interest in longer media, and different clips can refer to different sections of the same media.
