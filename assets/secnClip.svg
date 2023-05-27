@@ -17,7 +17,7 @@
     <rect id="btnMediaSelect" class="CTL" x="10.125" y="15.471" width="53.25" height="15.75"/>
     <text class="F" x="21.461px" y="26.714px">Media</text>
     <rect id="btnMediaPlay" class="CTL" x="418.125" y="15.471" width="54.75" height="14.25"/>
-    <text class="F" x="437.438px" y="27.586px">Play</text>
+    <text class="F" x="437.438px" y="26.714px">Play</text>
 
     <text class="F" x="9.593px" y="48.116px">Clip title:</text>
     <rect id="txtClipTitle" class="TB" x="69.375" y="37.971" width="403.5" height="13.5"/>
@@ -52,13 +52,13 @@
     <text class="F" x="351.688px" y="111.925px">Seek</text>
 
     <rect id="btnClipPlay" class="CTL" x="10.125" y="122.782" width="53.25" height="15.75"/>
-    <text class="F" x="26.711px" y="134.184px">Play</text>
+    <text class="F" x="26.711px" y="134.184px">New</text>
     <rect id="btnClipNew" class="CTL" x="70.092" y="122.407" width="117" height="16.5"/>
-    <text class="F" x="117.461px" y="134.184px">New</text>
+    <text class="F" x="117.461px" y="134.184px">Play</text>
     <rect id="btnClipAdd" class="CTL" x="193.592" y="122.407" width="54" height="16.5"/>
-    <text class="F" x="211.438px" y="134.184px">Add</text>
+    <text class="F" x="205.438px" y="134.184px">Update</text>
     <rect id="btnClipUpdate" class="CTL" x="254.092" y="122.407" width="54" height="16.5"/>
-    <text class="F" x="264.211px" y="134.184px">Update</text>
+    <text class="F" x="272.211px" y="134.184px">Add</text>
 
     <path d="M10.125,148.407l463.467,-0" class="L"/>
     <path d="M69.125,5.077l404.467,0" class="L"/>    

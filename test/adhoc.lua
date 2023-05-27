@@ -1,3 +1,5 @@
 local utils = require("_utils")
 
-print(utils.getCurrentDir())
+package.path = package.path .. ";" .. utils.getCurrentDir().."/.." .."/?.lua"
+local app = require("VclipMangler")
+local apputils = app.utils

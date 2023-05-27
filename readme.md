@@ -25,4 +25,4 @@ Use virtual clips to identify, organize, and play/repeat sections of instruction
 
 ## How to use
 
-(tbd; for now pls click the Help button in VclipMangler)
+(tbd; for now pls click the Help button in VclipMangler to see in-app help)
