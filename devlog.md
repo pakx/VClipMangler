@@ -14,6 +14,7 @@
 - widened clip-select button so it's an easier hit-target
 - app.createView(): corrected ascii diagram to reflect v0.3.0; edited again to reflect sort/filter changes
 - back-filled design notes in this document for v0.0.1
+- updated to v0.4.0
 
 ## 20230527
 
