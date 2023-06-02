@@ -1,5 +1,20 @@
 # devlog
 
+## 20230602
+
+- fixed [Group dropdown inconsistently populated](https://github.com/pakx/VClipMangler/issues/4); this was due h.groups being reset every time in showPlaylist(), but being rebuilt only if sorting were "byGroup"; addressed as follows: identified that h.groups need be rebuilt only when  opening a playlist or creating a new one; added param isNew in showPlaylist(isNew), w/ h.groups reset/rebuilt only if isNew == true; still in showPlaylist(), used a new var, `grouping` to track group-type clips-list displays
+- implemented [Add sort-by-media](https://github.com/pakx/VClipMangler/issues/5); addressed as follows: added new clips-sort option "byMedia"; edited showPlaylist() to handle sorting byMedia; when sorted byMedia, filtering also searches in clip.uri; this sorting affecting filtering is addressed below
+- fixed ["Check for updates" button remains visible even after Help is closed](https://github.com/pakx/VClipMangler/issues/6); addressed in app.createView()/overlayHelp()
+- writePlaylistM3u(): edited to set duration to (clip.stopTime - clip.startTime); adjusted tests
+- edited formatMediaUri() to return first part .. ellipses .. last part
+- showPlaylist(): refactored so sorting is table-driven, defaulting to sort byTitle
+- when sorted byGroup clips no longer show group in-line (each clip now shows title + duration only)
+- when sorted byMedia, Filter examines clip.title and clip.uri; rearranged sort/filter widgets to indicate they're now interrelated
+- acts.setFilter(): edited to match case-insensitive; as Lua 5.1 doesn't have a case-insensitive match directive, approx-d by comparing everything lowercased
+- widened clip-select button so it's an easier hit-target
+- app.createView(): corrected ascii diagram to reflect v0.3.0; edited again to reflect sort/filter changes
+- back-filled design notes in this document for v0.0.1
+
 ## 20230527
 
 - fixed [current clip not showing new-indicator after saving playlist](https://github.com/pakx/VClipMangler/issues/2); addressed by adding btnPlaylistSaveClick/showClip()
@@ -47,3 +62,77 @@
 - minor edits to readme, help
 - items in assets/screenshot-app.png from <https://www.ign.com/lists/100-best-movie-moments/>
 - updated to version 0.2.0
+
+## 20230520
+
+- the motivation for this extension comes from wanting to have a collection of segments of instructional videos: pick segment to watch, have it play from a designated start time to a stop time
+- desired list of features
+  - create a "clip", identified by media-uri, title, start- and stop-time
+  - display a list of such clips, sorted in various ways
+  - select/edit/delete a clip
+  - save a list of clips durably (probably as a file in the filesystem)
+- of usual suspects in current video players VLC recognizes m3u and xml playlist formats, supports extensibility via scripted and compiled modules, and offers a rudimentary tooklit for building graphical interfaces
+- VLC's scripting language, as of VLC version 3.0.18, is Lua 5.1; not a language I know, but seems easy to pick up, w/ handy resources
+- our "app" seems suited for [Basic Elm-Like App Structure (BELAS)](https://github.com/pakx/the-mithril-diaries/wiki/Basic-App-Structure); to wit:
+  - a `model` module, that is all data no functions; if we're able to peer inside at model data, we should be able to reconstruct the app in that state
+  - an `actions` module, controller by another name, that is the only module that modifies model; if we have model + actions we should be able to write, say, a command line interface client for it (and is what we do for testing)
+  - a `view` module that uses model (readonly) to render a user interface; user actions such as title-edits are passed on to `actions`, which updates `model`
+  The implied unidirectional flow of data/actions should be useful even without an auto-rendering mechanism
+
+  ```text
+                     +-----+        +----------+
+                     |     | <----- |   model  |
+           O         |  v  |        +----------+
+          -|-        |  i  |              ^
+           /\        |  e  |              |  
+                     |  w  |        +----------+
+                     |     | -----> |  actions |
+                     +-----+        +----------+
+  ```
+
+  - this immediately structures our app as follows:
+
+    ```lua
+    local app = {
+        model       = createModel()
+        , actions   = createActions(model)
+        , view      = createView(model, actions)
+
+        -- with the benefit of hindsight (at the time this part of the devlog is written; see #202306..)
+        -- we have the following properties as well
+
+        , utils     = {...} -- utilities such as copyFile(), fileExists()
+        , context   = {...} -- VLC extensions are invoked in the context of VLC and expect to find global references
+                            -- such as `vlc`; the `app.context` property is a way to provide stubs for those
+                            -- expected references when this extension is run outside of VLC (such as in tests)
+    }
+    ```
+
+- code conventions
+  - place function-describing comments within the function, using a 3-character version of comment characters
+  - use comma-first; similarly, if breaking up an expression involving operators, start the continuation line with an operator
+
+- Resources:
+
+  - [Lua 5.1 Reference Manual](http://www.lua.org/manual/5.1/)
+  - [Programming in Lua (first edition)](https://www.lua.org/pil/contents.html#P1)
+  - [Lua Tutorial](https://www.tutorialspoint.com/lua/index.htm)
+  - [Lua-users wiki](http://lua-users.org/) has useful material, though not easily discovered; among these
+    - [Tutorial Directory](http://lua-users.org/wiki/TutorialDirectory)
+    - [Table Serialization](http://lua-users.org/wiki/TableSerialization)
+  - [Lua Cookbook](https://stevedonovan.github.io/lua-cookbook/index.html)
+
+  - [LuaUnit](https://github.com/bluebird75/luaunit) testing library; has link to separate documentation site
+
+  - [Mefteg/basic.lua : a basic Lua extension](https://gist.github.com/Mefteg/18463a9cd362ff1f1ba6ff57cb7d4547)
+  - [Scripting VLC in lua](https://forum.videolan.org/viewforum.php?f=29) user discussion forum that I haven't been able to join due its overzealous bot-filtering/IP-banning
+  - [Instructions to code your own VLC Lua scripts and extensions](https://github.com/videolan/vlc/tree/master/share/lua) ; this may not be for the correct VLC version
+  - [VLC Lua Docs](https://vlc.verg.ca/); see the section on Extensions; source seems to be [verghost/vlc-lua-docs](https://github.com/verghost/vlc-lua-docs/blob/master/index.md)
+
+  - [M3U file format](https://en.wikipedia.org/wiki/M3U)
+  - [XSPF(“spiff”) spec](https://www.xspf.org/spec#411214-tracklist)
+
+  - how to deploy an extension to videolan isn't immediately obvious; eventually found these:
+    - <https://forum.videolan.org/viewtopic.php?t=98644#p522451>
+    - [How do I submit a VLC extension to addons.videolan.org?](https://forum.opendesktop.org/t/how-do-i-submit-a-vlc-extension-to-addons-videolan-org/20678)
+  

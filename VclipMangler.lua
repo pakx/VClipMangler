@@ -1,7 +1,7 @@
 local app = {
     extensionMeta = {
         title = "VClipMangler"
-        , version = "0.3.0"
+        , version = "0.4.0"
         , author = "pakx"
         , url = "https://github.com/pakx/VClipMangler"
         , shortdesc = "Manage Virtual Clips"
@@ -20,7 +20,7 @@ local app = {
             m3u files, not just VLC.)
         ]]
         , capabilities = {
-            --"menu", 
+            --"menu",
             --"input-listener",
             --"meta-listener",
             --"playing-listener",
@@ -99,6 +99,7 @@ app.createModel = function()
     mdl._id = 10
     mdl.sortCriteria = {
         "byGroup"
+        , "byMedia"
         , "byTitle"
     }
 
@@ -113,6 +114,7 @@ app.createModel = function()
     mdl.errs            = {}  -- todo: implement err-messaging
     mdl.clip            = nil -- see acts.createClip()
     mdl.filter          = nil
+    mdl.filterProps     = {}
     mdl.playlist        = nil -- see acts.setPlaylist()
 
     return mdl
@@ -167,6 +169,7 @@ app.createActions = function(mdl)
     local function readPlaylistM3u(pth)
         --- Reads m3u file, returns playlist
         --- See below for recognized m3u elements
+        --- @see-also m3u elements: https://en.wikipedia.org/wiki/M3U
         local function newTrack(title, duration)
             return {
                 title = title
@@ -219,6 +222,8 @@ app.createActions = function(mdl)
 
     local function writePlaylistM3u(playlist)
         --- Writes @playlist to file
+        --- @playlist: see createPlaylist()
+        --- @see-also readPlaylistM3u()
         if not playlist.path then app.utils.dump(mdl.consts.ERR_PLAYLIST_NO_PATH) return end
 
         local lst = {}
@@ -227,7 +232,7 @@ app.createActions = function(mdl)
         table.insert(lst, "")
 
         for _, v in pairs(playlist.clips) do
-            local duration = 1000
+            local duration = v.stopTime - v.startTime
             table.insert(lst, "#EXTINF:" .. tostring(duration) ..","..v.title)
             table.insert(lst, "#EXTVLCOPT:start-time=" .. v.startTime)
             table.insert(lst, "#EXTVLCOPT:stop-time=" .. v.stopTime)
@@ -244,13 +249,20 @@ app.createActions = function(mdl)
     end
 
     local function genId()
+        --- Generate unique IDs (for this session)
+        --- (Thus far there's no requirement this be numeric)
         mdl._id = mdl._id + 1
         return mdl._id
     end
 
     local function createClip(clipInfo, trackInfo)
-        --- @clipInfo:  {same fields as clip below}
-        --- @trackInfo: {same fields as track from acts.readPlaylistM3u()}
+        --- Creates/returns a clip, w/ passed-in or new id
+        --- Called in different contexts:
+        ---   - to create a clip from an m3u track
+        ---   - to create a new clip; see acts.newClip()
+        ---   - to create a copy of a clip; see acts.updateClip()
+        --- @clipInfo:  {same props as clip below}
+        --- @trackInfo: {same props as track from acts.readPlaylistM3u()}
         local ci, ti = clipInfo, trackInfo
         local clip = {
             id          = (ci and ci.id) or genId()
@@ -264,17 +276,19 @@ app.createActions = function(mdl)
                 or mdl.consts.NONE
             , uri       = (ci and ci.uri) or (ti and ti.uri)
             , startTime = tonumber((ci and ci.startTime)
-                or (ti and ti.options["start-time"]) 
+                or (ti and ti.options["start-time"])
                 or 0)
-            , stopTime  = tonumber((ci and ci.stopTime) 
-                or (ti and ti.options["stop-time"]) 
+            , stopTime  = tonumber((ci and ci.stopTime)
+                or (ti and ti.options["stop-time"])
                 or 0)
-            , group     = (ci and ci.group) 
+            , group     = (ci and ci.group)
                 or (ti and ti.group)
                 or mdl.consts.NONE
         }
 
-        clip.isOk = function() 
+        clip.isOk = function()
+            --- Tells if clip data is valid
+            --- Returns true/false, errMsg
             local strt = tonumber(clip.startTime)
             local stop = tonumber(clip.stopTime)
             local errs = {}
@@ -289,6 +303,8 @@ app.createActions = function(mdl)
     end
 
     local function findClipById(clipId)
+        --- Finds/returns clip by id; nil if not found
+        --- Note: we can use a lookup table if the linear search below shows issues
         for k, v in pairs(mdl.playlist.clips) do
             if v.id == clipId then return k, v end
         end
@@ -309,8 +325,7 @@ app.createActions = function(mdl)
         --- Creates/returns a new, blank playlist inititlized to @playlistInfo
         --- @playlistInfo: minimum {path="..."}
         ---   This may a playlist we created (e.g. @see acts.newPlaylist())
-        ---   or one read from disk and with a slightly different structure
-        ---   (@see readPlaylistM3u())
+        ---   or one read from an m3u file (@see readPlaylistM3u())
         local pi = playlistInfo
         local pl = {
             isNew = pi.isNew or false
@@ -323,6 +338,7 @@ app.createActions = function(mdl)
         }
 
         pl.hasEdits = function()
+            --- Tells if playlist has edits
             local yn = pl.hasDeletes
             if not yn then
                 for _, v in pairs(pl.clips) do
@@ -333,6 +349,7 @@ app.createActions = function(mdl)
             return yn
         end
 
+        -- convert tracks to clips
         if pi.tracks then
             for _, trk in pairs(pi.tracks) do
                 local clip = createClip(nil,trk)
@@ -345,7 +362,7 @@ app.createActions = function(mdl)
 
     local function setPlaylist(playlist)
         --- Translates from external playlist (eg m3u) to playlist of clips
-        --- @playlist: see acts.createPlaylist() for expected fields
+        --- @playlist: see acts.createPlaylist() for expected props
         ---   This may be data returned from an externally-read playlist
         --- @see readPlaylistM3u()
         local pl = createPlaylist(playlist)
@@ -422,8 +439,9 @@ app.createActions = function(mdl)
     acts.updateClip = function(clipInfo, saveToList, asNew)
         --- Updates mdl.clip + optionally saves to mdl.playlist
         --- @clipInfo describes a clip; @see acts.createClip()
-        --- @asNew true/false mdl.clip is set to a new clip initialized w/ @clipInfo
-        --- @saveToList true/false adds-to/updates mdl.playlist
+        --- @saveToList true/false updates or adds-to mdl.playlist.clips
+        --- @asNew true/false tells if mdl.clip should be added to mdl.playlist.clips
+        ---   as a new clip w/ a new id; use when creating multiple clips from same media
         --- Returns ok, errMsg, clip
         local yn, msg, clip
         if asNew then
@@ -454,7 +472,7 @@ app.createActions = function(mdl)
             else
                 local k, _ = findClipById(clip.id)
                 if k then
-                    mdl.playlist.clips[k] = clip 
+                    mdl.playlist.clips[k] = clip
                 else
                     msg = mdl.consts.ERR_CLIP_NOT_FOUND
                     app.utils.dump(clip, msg)
@@ -465,7 +483,7 @@ app.createActions = function(mdl)
             if clip.isNew then clip.hasEdits = false end
         end
 
-        if mdl.filter then acts.setFilter(mdl.filter) end
+        if mdl.filter then acts.setFilter(mdl.filter, mdl.filterProps) end
 
         return yn, msg, clip
     end
@@ -477,18 +495,31 @@ app.createActions = function(mdl)
         return v
     end
 
-    acts.setFilter = function(regex)
+    acts.setFilter = function(regex, clipProps)
+        --- Filters playlist.clips by @regex applied to @clipProps
+        --- @regex matching is "case insensitive" (approx-d by lowercasing everything)
+        --- Resulting clips are saved in `filteredClips`
+        --- @regex Lua-style regex, magic chars already escaped if needing to be used as literals, etc
+        --- @clipProps optional table of clip props to search; results are or-ed; defaults to {"title"};
+        ---   eg {"title", "uri"}
         if regex == "" then acts.clearFilter() return end
         if not mdl.playlist then return end
 
+        if not clipProps then clipProps = {"title"} end
+        regex = string.lower(regex)
         local clips = {}
 
-        for _, v in pairs(mdl.playlist.clips) do
-            if string.find(v.title, regex) then
-                table.insert(clips, v)
+        for _, clip in pairs(mdl.playlist.clips) do
+            for _, prop in pairs(clipProps) do
+                if string.find(string.lower(clip[prop]), regex) then
+                    table.insert(clips, clip)
+                    break
+                end
             end
         end
+
         mdl.filter = regex
+        mdl.filterProps = clipProps
         mdl.playlist.filteredClips = clips
     end
 
@@ -503,11 +534,13 @@ end
 local function createViewHandlers(mdl, acts, vw)
     --- view-related functions: click-handlers, etc
     --- Logically part of createView(); extracted for convenience
-    --- @mdl: (readonly) model; @see createModel()
+    --- Note: all args are readonly or not directly modified
+    --- @mdl:  model; @see createModel()
     --- @acts: actions; @see createActions()
-    --- @vw: (readonly) app.view; @see createView()
+    --- @vw:   app.view; @see createView()
     local h = {}
-    h.groups, h.groupsByName = {}, {} -- manage entries in ddGroup
+    h.groups = {}       -- groups shown in ddGroup
+    h.groupsByName = {} -- reverse-lookup for h.groups
 
     -- internal functions
 
@@ -521,7 +554,17 @@ local function createViewHandlers(mdl, acts, vw)
 
     local function initializeDropdownSort()
         for k, v in ipairs(mdl.sortCriteria) do
-            vw.ddSort:add_value(v, k) 
+            vw.ddSort:add_value(v, k)
+        end
+    end
+
+    local function formatMediaUri(uri)
+        --- Returns @uri formatted to fit/show in view
+        local maxlen = 100
+        if string.len(uri) <= maxlen then
+            return uri
+        else
+            return string.sub(uri, 1, 25) .. "..." .. string.sub(uri, -72)
         end
     end
 
@@ -542,81 +585,116 @@ local function createViewHandlers(mdl, acts, vw)
         end
     end
 
-    local function showPlaylist()
-        --- Shows current playlist
-        local function sortByTitle(a, b)
-            return a.title < b.title
-        end
-
-        local function sortByGroup(a, b)
-            return a.group == b.group and a.title < b.title or a.group < b.group
-        end
+    local function showPlaylist(isNew)
+        --- Shows current playlist, w/ clips sorted per vw selection
+        --- @isNew true/false tells if we're showing a different playlist from the one
+        ---   being shown just before, in which case we rebuild known groups, etc
+        local sortMeta = {
+            byGroup = {
+                fn = function(a, b)
+                    return a.group == b.group and a.title < b.title or a.group < b.group
+                end
+                , lpad = string.rep(" ", 10)
+            }
+            , byMedia = {
+                fn = function(a, b)
+                    return a.uri == b.uri
+                        and (a.startTime == b.startTime and a.title < b.title or a.startTime < b.startTime)
+                        or a.uri < b.uri
+                end
+                , lpad = string.rep(" ", 10)
+            }
+            , byTitle = {
+                fn = function(a, b)
+                    return a.title < b.title
+                end
+                , lpad = string.rep(" ", 5)
+            }
+        }
 
         vw.lstClip:clear()
 
         local pl = mdl.playlist
         if not pl then h.showMsg(mdl.consts.ERR_PLAYLIST_NONE, 1) end
 
-        local sortBy = mdl.sortCriteria[vw.ddSort:get_value()]
-        if not sortBy then h.showMsg(mdl.consts.ERR_SORT_CRITERIA, 1) return end
-
-        local clips = pl.filteredClips or pl.clips
-        local leftPadding = nil
-
-        if sortBy == "byGroup" then
-            table.sort(clips, sortByGroup)
-            leftPadding = string.rep(" ", 10)
-        elseif sortBy == "byTitle" then
-            table.sort(clips, sortByTitle)
-            leftPadding = string.rep(" ", 5)
-        end
-
         local txt = "Playlist"..(pl.isNew and " +" or (pl.hasEdits() and " *") or "")
         vw.lblCaptionPlaylist:set_text(txt)
-
         vw.lblPlaylist:set_text(pl.path)
 
-        local idxSep = "."
-        local idx = 0
-        local DEF_GRP_ID = -1
-        h.groups, h.groupsByName = {mdl.consts.NONE}, {[mdl.consts.NONE]=true}
+        local clips = pl.filteredClips or pl.clips
+        local idx, sepIdx, DEF_GRP_ID = 0, ".", -1
+        local grouping = {}
+
+        local sortBy = mdl.sortCriteria[vw.ddSort:get_value()]
+        local sm = sortMeta[sortBy]
+        if not sm then
+            h.showMsg(mdl.consts.ERR_SORT_CRITERIA, 1)
+            sm = sortMeta["byTitle"]
+        end
+        table.sort(clips, sm.fn)
+
+        if isNew then
+            h.groups       = {mdl.consts.NONE}
+            h.groupsByName = {[mdl.consts.NONE]=true}
+        end
 
         for _, clip in pairs(clips) do
             local clipId = clip.id
 
-            if sortBy == "byGroup" then
-                if not h.groupsByName[clip.group] then 
-                    table.insert(h.groups, clip.group)
-                    h.groupsByName[clip.group] = true
-                    idx = 1
+            if isNew and not h.groupsByName[clip.group] then
+                table.insert(h.groups, clip.group)
+                h.groupsByName[clip.group] = true
+            end
 
+            if sortBy == "byGroup" then
+                if not grouping[clip.group] then
+                    grouping[clip.group] = true
+                    idx = 1
                     vw.lstClip:add_value(string.rep(".", 10) .. " " .. clip.group, DEF_GRP_ID)
                 else
                     idx = idx + 1
                 end
-            else
+                txt = (
+                    " ["
+                    .. ((clip.stopTime or 0) - (clip.startTime or 0))
+                    .. "]"
+                )
+            elseif sortBy == "byMedia" then
+                if not grouping[clip.uri] then
+                    grouping[clip.uri] = true
+                    idx = 1
+                    vw.lstClip:add_value(string.rep(".", 10) .. " " .. formatMediaUri(clip.uri), DEF_GRP_ID)
+                else
+                    idx = idx + 1
+                end
+                txt = (
+                    " ["
+                    ..(clip.group == mdl.consts.NONE and "" or (clip.group.."/"))
+                    .. tostring(clip.startTime or 0) .. "-" .. tostring(clip.stopTime or 0)
+                    .. "]"
+                )
+            else -- byTitle
                 idx = idx + 1
+
+                txt = (
+                    " ["
+                    ..(clip.group == mdl.consts.NONE and "" or (clip.group.."/"))
+                    .. ((clip.stopTime or 0) - (clip.startTime or 0))
+                    .. "]"
+                )
             end
 
-            local leader = string.sub(idx .. idxSep .. leftPadding, 1, string.len(leftPadding))
+            local leader = string.sub(idx .. sepIdx .. sm.lpad, 1, string.len(sm.lpad))
             local glyphs = (clip.isNew and "+" or "")..(clip.hasEdits and "*" or "")
-            local duration = (clip.stopTime or 0) - (clip.startTime or 0)
             txt = leader
-                .. ((glyphs ~= "") and (glyphs.." ") or "")
                 .. clip.title
-                .. (" ["..(clip.group == mdl.consts.NONE and "" or (clip.group.."/"))..duration.."]")
-
+                .. ((glyphs ~= "") and (glyphs.." ") or "")
+                .. txt
 
             vw.lstClip:add_value(txt, clipId)
         end
 
-        showGroups(true)
-    end
-
-    local function formatMediaUri(uri)
-        --- Returns @uri formatted to fit/show in view
-        local maxlen = 100
-        return string.len(uri) <= maxlen and uri or string.sub(uri, 1, maxlen).."..."
+        if isNew then showGroups(true) end
     end
 
     local function showClipStatus()
@@ -680,7 +758,7 @@ local function createViewHandlers(mdl, acts, vw)
         showPlaylists(true)
         showPlaylist()
         showClip()
-        h.showMsg(mdl.consts.MSG_PLAYLIST_SAVED_TIME .. os.date("%Y-%m-%d %H:%M:%S"))            
+        h.showMsg(mdl.consts.MSG_PLAYLIST_SAVED_TIME .. os.date("%Y-%m-%d %H:%M:%S"))
     end
 
     h.btnPlaylistOpenClick = function()
@@ -689,7 +767,7 @@ local function createViewHandlers(mdl, acts, vw)
             if not app.utils.fileExists(v) then h.showMsg(mdl.consts.MSG_CANNOT_FIND ..v,1) return end
 
             acts.openPlaylist(v)
-            showPlaylist()
+            showPlaylist(true)
             showClip()
             h.showMsg("")
         end
@@ -717,7 +795,7 @@ local function createViewHandlers(mdl, acts, vw)
             pth = string.gsub(pth, "%....$", ".m3u")
 
             acts.newPlaylist(pth)
-            showPlaylist()
+            showPlaylist(true)
         end
 
         local function cbHasEdits(btn)
@@ -754,24 +832,23 @@ local function createViewHandlers(mdl, acts, vw)
     end
 
     h.btnSetGroupClick = function()
-        local grpNew, grpDrp, yn = app.utils.trim2(vw.txtGroup:get_text()), -1, false
+        --- Sets a clip's group per vw
+        --- Updates list of known groups as needed
+        local txtNew, txtDrp = app.utils.trim2(vw.txtGroup:get_text()), nil
 
-        if grpNew == "" then
-            grpDrp = vw.ddGroups:get_value()
-            if grpDrp > 0 and next(h.groups) then
-                grpDrp = h.groups[tonumber(grpDrp)]
-                yn = true
-            end
-            if not yn then h.showMsg(mdl.consts.ERR_GROUP_NONE, 1) return end
+        if txtNew == "" then
+            local k, v = vw.ddGroups:get_value()
+            if k < 1 then h.showMsg(mdl.consts.ERR_GROUP_NONE, 1) return end
+            txtDrp = v
         end
 
-        vw.lblGroup:set_text((grpNew ~= "") and grpNew or grpDrp)
+        vw.lblGroup:set_text((txtNew ~= "") and txtNew or txtDrp)
 
-        if grpNew ~= "" then
+        if txtNew ~= "" then
             vw.txtGroup:set_text("")
-            if not h.groupsByName[grpNew] then 
-                table.insert(h.groups, grpNew)
-                h.groupsByName[grpNew] = true
+            if not h.groupsByName[txtNew] then
+                table.insert(h.groups, txtNew)
+                h.groupsByName[txtNew] = true
                 showGroups(true)
             end
         end
@@ -844,28 +921,32 @@ local function createViewHandlers(mdl, acts, vw)
         showPlaylist()
     end
 
-    h.btnSortClick = function()
-        showPlaylist()
-    end
-
-    h.btnFilterClick = function()
+    h.btnSortFilterClick = function()
+        --- Sets filter; sort is picked up by showPlaylist()
+        --- We could make a case for showPlaylist() picking up or being passed in
+        --- both filter and sort. Perhaps a tbd; no hurry.
         local rgx = app.utils.trim2(vw.txtFilter:get_text())
-        if rgx == "" then
-            h.btnFilterClearClick()
+        if rgx == "" and mdl.filter and mdl.filter ~= "" then
+            h.btnSortFilterClearClick()
             return
         end
-        acts.setFilter(rgx)
-        showPlaylist()
-        vw.lblFilter:set_text(rgx)
-        vw.lblCaptionFilter:set_text("Filter: *")
+
+        if rgx ~= "" then
+            local sortBy = mdl.sortCriteria[vw.ddSort:get_value()]
+            local props = (sortBy == "byMedia") and {"title", "uri"} or {"title"}
+            acts.setFilter(rgx, props)
+            showPlaylist()
+            vw.lblFilter:set_text(rgx)
+            vw.lblCaptionFilter:set_text("Sort/Filter: *")
+        end
     end
 
-    h.btnFilterClearClick = function()
+    h.btnSortFilterClearClick = function()
         acts.clearFilter()
         showPlaylist()
         vw.lblFilter:set_text("")
         vw.txtFilter:set_text("")
-        vw.lblCaptionFilter:set_text("Filter:")
+        vw.lblCaptionFilter:set_text("Sort/Filter:")
     end
 
     h.btnHelpClick = function()
@@ -937,8 +1018,8 @@ app.createView = function(mdl, acts)
         | >stop-time  _______ >decr   >incr   >seek
         | >play       >new    >select >update >add
         | -------------------------------------------------
-        | Filter:     _______ >go     >clear  _ _ _ _
-        | Sort:       ------v >go             >select >delete
+        | Filter/Sort:------v _______ >go     >clear _ _ _
+        | >select                             >delete
         | +-----------------------------------------------+
         | | 1. clip-title-1 [group/duration]              |
         | | 2. clip-title-2 [group/duration]              |
@@ -1000,7 +1081,7 @@ app.createView = function(mdl, acts)
         local col = colspanMax - string.len(buttons) - 1
 
         for _, v in ipairs(cfg) do
-            if string.find(buttons, v[1]) then    
+            if string.find(buttons, v[1]) then
                 col = col + 1
                 local ctl = dlg:add_button(v[2], genOnClick(v[1]), col, 2, 1, 1)
                 table.insert(v, ctl) -- e.g. now meta/v => {"y", "Yes", ctl}
@@ -1046,7 +1127,7 @@ app.createView = function(mdl, acts)
         local row, frame, btnOk, btnCheck
 
         local function cbOk()
-            for _, v in pairs({btnOk, frame}) do
+            for _, v in pairs({btnCheck, btnOk, frame}) do
                 if v then vw.dlg:del_widget(v) end
                 isHelpVisible = false
             end
@@ -1119,17 +1200,15 @@ app.createView = function(mdl, acts)
     dlg:add_label("<hr>", 1, row, colspanMax, 1)
 
     row = row + 1
-    vw.lblCaptionFilter = dlg:add_label("Filter:", 2, row, 1, 1)
+    vw.lblCaptionFilter = dlg:add_label("Sort/Filter:", 1, row, 1, 1)
+    vw.ddSort = dlg:add_dropdown(2, row, 1, 1)
     vw.txtFilter = dlg:add_text_input("", 3, row, 1, 1)
-    dlg:add_button("Go", h.btnFilterClick, 4, row, 1, 1)
-    dlg:add_button("Clear", h.btnFilterClearClick, 5, row, 1, 1)
+    dlg:add_button("Go", h.btnSortFilterClick, 4, row, 1, 1)
+    dlg:add_button("Clear", h.btnSortFilterClearClick, 5, row, 1, 1)
     vw.lblFilter = dlg:add_label("", 6, row, 1, 1)
 
     row = row + 1
-    dlg:add_button("Select", h.btnClipSelectClick, 1, row, 1, 1)
-    dlg:add_label("Sort:", 2, row, 1, 1)
-    vw.ddSort = dlg:add_dropdown(3, row, 1, 1)
-    dlg:add_button("Go", h.btnSortClick, 4, row, 1, 1)
+    dlg:add_button("Select", h.btnClipSelectClick, 1, row, 2, 1)
     dlg:add_button("Delete", h.btnClipDeleteClick, 6, row, 1, 1)
 
     row, rowspan = row + 2, 50
@@ -1212,7 +1291,7 @@ app.utils = {
             .. "_bak" .. os.date('%Y%m%d%H%M%S') .. "." .. e
         app.utils.copyFile(filePath, destFolder .. newName)
 
-        -- delete per backupCount    
+        -- delete per backupCount
         local fileSpec = app.utils.escapeMagic(string.sub(f, 1, string.len(f) - string.len(e) - 1))
             .. "_bak%d+%." .. e
         local lst = app.utils.scandir(destFolder, fileSpec) or {}
@@ -1243,11 +1322,11 @@ app.utils = {
                     print(formatting)
                     app.utils.dump(v, indent+1)
                 elseif type(v) == 'boolean' then
-                    print(formatting .. tostring(v))    
+                    print(formatting .. tostring(v))
                 elseif type(v) == 'function' then
-                    print(formatting .. type(v))    
+                    print(formatting .. type(v))
                 elseif type(v) == 'userdata' then
-                    print(formatting .. type(v))   
+                    print(formatting .. type(v))
                 else
                     print(formatting .. v)
                 end
@@ -1285,7 +1364,7 @@ app.utils = {
         --- @filenameRegex: optional regex of file name
         if not filenameRegex then filenameRegex = "." end
         local lst = {}
-        local cmd = package.config:sub(1,1) == "\\" 
+        local cmd = package.config:sub(1,1) == "\\"
             and 'dir "'..directory..'" /b'
             or 'ls -a "'..directory..'"' -- possibly 'find "' .. directory "" -maxdepth 1 -type f -ls"
 
@@ -1316,8 +1395,11 @@ app.utils = {
 
 app.genHelpText = function(mdl)
     --- Generates text shown in Help
-    --- Logically part of createView(); extracted for convenience
     --- @mdl (readonly) @see createModel()
+    --- Logically part of createView(); extracted for convenience.
+    --- There was also a thought of placing this function in a separate file
+    --- to be concatenated to the main file during a build process, ergo this
+    --- being toward the end if the main file.
 
     local data = {
         mdl = mdl
@@ -1335,7 +1417,7 @@ app.genHelpText = function(mdl)
         local v = data
         for k in pth:gmatch('[^.]+') do v = v[k] end
         return v
-    end        
+    end
 
     local html = [[
         <style>
@@ -1352,11 +1434,12 @@ app.genHelpText = function(mdl)
             <p><span class="title">{=xm.title}</span> (v{=xm.version}): {=shortdescLcase}</p>
             <p>{=xm.description}</p>
 
-            <p>Usage should be discoverable, if not immediately intuitive due limitations
-            of the default UI widgets in Lua extensions (at least best I can tell).
+            <p>Note: extension usage should be discoverable, if not immediately intuitive
+            due limitations of the default UI widgets in Lua extensions (at least best I
+            can tell). 
             For example, to edit an element in a list we'd usually just double-click it
-            to indicate selection + edit; here lacking a readily usable click event we
-            click the element in the list, then click a Select button to act on it.</p>
+            to indicate selection + edit, whereas here lacking a readily usable click event
+            we click the element in the list, then click a Select button to act on it.</p>
 
             <p> Please file bugs, suggestions, etc at <a href="{=xm.url}/issues">
             {=xm.url}/issues</a>
@@ -1366,7 +1449,7 @@ app.genHelpText = function(mdl)
             <p><span class="secn">Extension settings</span>
                 <p>Extension settings are saved in an ini-file in the user's "homedir"
                 ({=pthIniFormatted}). If you haven't already created an ini-file, one will be
-                created when this extension is started. Available settings are:</p>
+                created when the extension is started. Available settings are:</p>
 
                 <ul>
                     <li><kw>backupCount</kw>=number of backups to keep when saving a playlist;
@@ -1441,6 +1524,8 @@ app.genHelpText = function(mdl)
                     <li>Filter interprets search text as a Lua-style regular expression; this could
                     lead to surprises if it contains "magic characters"; pls see
                     <a href="https://www.lua.org/pil/20.2.html">20.2 – Patterns</a></li>
+                    <li>when sorted byGroup or byTitle, Filter searches only in clip title; when sorted
+                    byMedia, Filter searches in clip title and uri (the path to the media file)</li>
                     <li>after a playlist is saved, any info in the Clip section is considered "new";
                     this avoids thence updating an incorrect clip (due how we manage clip ids).</li>
                     <li>currently there are no facilities to delete playlists, or to open ones not
@@ -1457,7 +1542,7 @@ app.genHelpText = function(mdl)
                 <br/>
             </p>
         </div>
-    ]] 
+    ]]
 
     --html = html:gsub("%s+//[^\n]+", "") -- remove //-comments
 
@@ -1471,6 +1556,11 @@ app.genHelpText = function(mdl)
 end
 
 app.getImages = function()
+    --- Returns a table of base64 image data, keyed by name
+    --- Logically part of createView(); extracted for convenience.
+    --- There was also a thought of placing this function in a separate file
+    --- to be concatenated to the main file during a build process, ergo this
+    --- being toward the end if the main file.
     return {
         ["pnlNewPlaylist"] = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4NCjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDQ4NCA5MCIgdmVyc2lvbj0iMS4xIg0KICAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyINCiAgICB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSINCiAgICB4bWxuczpzZXJpZj0iaHR0cDovL3d3dy5zZXJpZi5jb20vIiBzdHlsZT0iZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1taXRlcmxpbWl0OjEuNTsiPg0KICAgIDxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+PCFbQ0RBVEFbDQogICAgLkJHe2ZpbGw6I0YwRjBGMDtzdHJva2U6bm9uZTt9DQogICAgLkNUTHtmaWxsOiNFMUUxRTE7c3Ryb2tlOiNBREFEQUQ7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkZ7Zm9udC1mYW1pbHk6J0FyaWFsTVQnLCAnQXJpYWwnLCBzYW5zLXNlcmlmO2ZvbnQtc2l6ZToxMHB4O30NCiAgICAuTHtmaWxsOm5vbmU7c3Ryb2tlOiMwMDA7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLk9Ge2ZpbGw6I2YzODAwMDtzdHJva2U6I2YzODAwMDtzdHJva2Utd2lkdGg6MC43NXB4O30NCiAgICAuVEJ7ZmlsbDojRkZGO3N0cm9rZTojN0E3QTdBO3N0cm9rZS13aWR0aDowLjc1cHg7fQ0KXV0+PC9zdHlsZT4NCg0KICAgIDxyZWN0IGNsYXNzPSJCRyIgeD0iMCIgeT0iMjciIHdpZHRoPSI0ODMiIGhlaWdodD0iNjIiLz4NCiAgICA8cmVjdCBpZD0iYm9yZGVyIiB4PSIwLjM3NSIgeT0iMC4zNzUiIHdpZHRoPSI0ODIuOTg0IiBoZWlnaHQ9Ijg5LjI1IiBjbGFzcz0iTCIvPg0KICAgIDxnIGlkPSJ0aXRsZWJhciI+DQogICAgICAgIDxwYXRoIGlkPSJzeXMiIGNsYXNzPSJMIiBkPSJNNDI3LjQxMSwxMC43MjhsMCw2Ljg3NWw2LjUsLTBsMC4yNSwtNi44NzVsLTYuNzUsLTBabS0zMywzLjQzN2w2LDBtNjEuNSwtMy40MzdsNy4yNSw2Ljg3NW0wLC02Ljg3NWwtNi4yNSw2Ljg3NSIvPg0KICAgICAgICA8ZyBpZD0ibG9nbyI+DQogICAgICAgICAgICA8cGF0aCBkPSJNOS42MTEsMTUuNjYybC0xLjA4NiwwbC0xLjAyOSw0LjM0M2wxMC44LDAuMDczbC0wLjk1MiwtNC40MTZsLTEuMjM5LDBjMCwwIC0xLjEwNCwxLjc0MSAtMi45NTUsMS43NzNjLTIuNDIsMC4wNDMgLTMuNTM5LC0xLjc3MyAtMy41MzksLTEuNzczWiIgY2xhc3M9Ik9GIi8+DQogICAgICAgICAgICA8cGF0aCBkPSJNOS43MzksMTYuMTFsLTAuMzkzLDEuNTE3Yy0wLDAgMS4wMzksMS4wNjUgMy42MDgsMS4wMTVjMi41MDksLTAuMDUgMy43MSwtMS4zMjYgMy43MSwtMS4zMjZsLTAuNTA2LC0xLjI5NiIgc3R5bGU9ImZpbGw6bm9uZTtzdHJva2U6I2FjNDAwMDtzdHJva2Utd2lkdGg6MC40NnB4OyIvPg0KICAgICAgICAgICAgPHBhdGggZD0iTTExLjIyNSwxMi4wNDhsMy4zMzQsLTAuMDI4bDAuNjUyLDIuMTQ1bC00LjUxNSwtMGwwLjUyOSwtMi4xMTdaIiBjbGFzcz0iT0YiLz4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik05Ljg4OSwxNS42NjJsMS44NTUsLTYuMjg1bTQuMjUsNi4yODVsLTIuMDQsLTYuMjg1IiBzdHlsZT0iZmlsbDpub25lO3N0cm9rZTojYjBiNGI3O3N0cm9rZS13aWR0aDowLjQ2cHg7Ii8+DQogICAgICAgICAgICA8cGF0aCBkPSJNMTIuMjk2LDcuMzA3bDEuMTQzLDBsMC41MTUsMi4wN2wtMi4yMSwtMC4wMDFsMC41NTIsLTIuMDY5WiIgY2xhc3M9Ik9GIi8+DQogICAgICAgIDwvZz4NCiAgICAgICAgPHRleHQgeD0iMjEuNTkycHgiIHk9IjE4LjQwN3B4IiBjbGFzcz0iRiI+VmNsaXBNYW5nbGVyPC90ZXh0Pg0KICAgIDwvZz4NCiAgICA8ZyAgPg0KICAgICAgICA8cmVjdCB4PSI4Ljk2OSIgeT0iMzEuOTczIiB3aWR0aD0iNDY0LjA0OSIgaGVpZ2h0PSI1My4wNTUiIGNsYXNzPSJUQiIvPg0KICAgICAgICA8cmVjdCB4PSI4Ljk2OSIgeT0iNjYuMDk4IiB3aWR0aD0iMjk5LjQyNCIgaGVpZ2h0PSIxNS4zNjgiIGNsYXNzPSJUQiIvPg0KICAgICAgICA8cmVjdCB4PSIzMTUuMTU2IiB5PSI2Ni4wOTgiIHdpZHRoPSI5OC4wNDkiIGhlaWdodD0iMTUuMzY4IiBjbGFzcz0iQ1RMIi8+DQogICAgICAgIDxyZWN0IHg9IjQxOC4wOTQiIHk9IjY2LjA5OCIgd2lkdGg9IjU0LjkyNCIgaGVpZ2h0PSIxNS4zNjgiIGNsYXNzPSJDVEwiLz4NCg0KICAgICAgICA8dGV4dCB4PSIxMS44NDJweCIgeT0iNDQuNjU3cHgiIGNsYXNzPSJGIj5FbnRlciBmdWxsIHBhdGggdG8gbTN1IHBsYXlsaXN0IHRvIGNyZWF0ZTo8L3RleHQ+DQogICAgICAgIDx0ZXh0IHg9IjExLjg0MnB4IiB5PSI3OS4zNjJweCIgY2xhc3M9IkYiPkM6XFByb2plY3RzXHBsYXlsaXN0c1xteS3vrIFyc3QtcGxheWxpc3QubTN1PC90ZXh0Pg0KICAgICAgICA8dGV4dCB4PSIzNTYuNzI0cHgiIHk9Ijc3LjM2NHB4IiBjbGFzcz0iRiI+T0s8L3RleHQ+DQogICAgICAgIDx0ZXh0IHg9IjQzMC40MTJweCIgeT0iNzcuMzY0cHgiIGNsYXNzPSJGIj5DYW5jZWw8L3RleHQ+DQogICAgPC9nPg0KPC9zdmc+DQoNCg=="
         , ["secnClip"] = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4NCjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDQ4NCAxNTEiIHZlcnNpb249IjEuMSINCiAgICB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciDQogICAgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHhtbDpzcGFjZT0icHJlc2VydmUiDQogICAgeG1sbnM6c2VyaWY9Imh0dHA6Ly93d3cuc2VyaWYuY29tLyIgc3R5bGU9ImZpbGwtcnVsZTpldmVub2RkO2NsaXAtcnVsZTpldmVub2RkO3N0cm9rZS1saW5lY2FwOnJvdW5kO3N0cm9rZS1saW5lam9pbjpyb3VuZDtzdHJva2UtbWl0ZXJsaW1pdDoxLjU7Ij4NCiAgICA8c3R5bGUgdHlwZT0idGV4dC9jc3MiPjwhW0NEQVRBWw0KICAgIC5Ge2ZvbnQtZmFtaWx5OidBcmlhbE1UJywgJ0FyaWFsJywgc2Fucy1zZXJpZjtmb250LXNpemU6MTBweDt9DQogICAgLkx7ZmlsbDpub25lO3N0cm9rZTojMDAwO3N0cm9rZS13aWR0aDowLjc1cHg7fQ0KICAgIC5CR3tmaWxsOiNGMEYwRjA7c3Ryb2tlOm5vbmU7fQ0KICAgIC5UQntmaWxsOiNGRkY7c3Ryb2tlOiM3QTdBN0E7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkNUTHtmaWxsOiNFMUUxRTE7c3Ryb2tlOiNBREFEQUQ7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQpdXT48L3N0eWxlPg0KICAgIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSI0ODMiIGhlaWdodD0iMTUyIiBjbGFzcz0iQkciLz4NCg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSI5LjM1NHB4IiB5PSI5LjY0OXB4Ij5DbGlwPC90ZXh0Pg0KDQogICAgPHJlY3QgaWQ9ImJ0bk1lZGlhU2VsZWN0IiBjbGFzcz0iQ1RMIiB4PSIxMC4xMjUiIHk9IjE1LjQ3MSIgd2lkdGg9IjUzLjI1IiBoZWlnaHQ9IjE1Ljc1Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjIxLjQ2MXB4IiB5PSIyNi43MTRweCI+TWVkaWE8L3RleHQ+DQogICAgPHJlY3QgaWQ9ImJ0bk1lZGlhUGxheSIgY2xhc3M9IkNUTCIgeD0iNDE4LjEyNSIgeT0iMTUuNDcxIiB3aWR0aD0iNTQuNzUiIGhlaWdodD0iMTQuMjUiLz4NCiAgICA8dGV4dCBjbGFzcz0iRiIgeD0iNDM3LjQzOHB4IiB5PSIyNi43MTRweCI+UGxheTwvdGV4dD4NCg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSI5LjU5M3B4IiB5PSI0OC4xMTZweCI+Q2xpcCB0aXRsZTo8L3RleHQ+DQogICAgPHJlY3QgaWQ9InR4dENsaXBUaXRsZSIgY2xhc3M9IlRCIiB4PSI2OS4zNzUiIHk9IjM3Ljk3MSIgd2lkdGg9IjQwMy41IiBoZWlnaHQ9IjEzLjUiLz4NCg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSI5LjU5M3B4IiB5PSI2OS42MTZweCI+R3JvdXA6PC90ZXh0Pg0KICAgIDxnIGlkPSJkZEdyb3VwcyI+DQogICAgICAgIDxyZWN0IGlkPSIiIHg9IjE5Mi44NzUiIHk9IjU2LjcyMSIgd2lkdGg9IjExNSIgaGVpZ2h0PSIxNi41IiBjbGFzcz0iQ1RMIi8+DQogICAgICAgIDxwYXRoIGQ9Ik0zMDAuMDM0LDY4Ljc4MmwzLjMwOCwtNS42NzNsLTYuNjE1LC0wbDMuMzA3LDUuNjczWiIgc3R5bGU9InN0cm9rZTojMDAwO3N0cm9rZS13aWR0aDowLjc1cHg7Ii8+DQogICAgPC9nPg0KICAgIDxyZWN0IGlkPSJ0eHRHcm91cCIgY2xhc3M9IlRCIiB4PSIzMTQuNjI1IiB5PSI1Ny41OTYiIHdpZHRoPSI5Ny41IiBoZWlnaHQ9IjE2LjUiLz4NCiAgICA8cmVjdCBpZD0iYnRuR3JvdXBTZXQiIGNsYXNzPSJDVEwiIHg9IjQxOS42MjUiIHk9IjU4Ljk3MSIgd2lkdGg9IjU0Ljc1IiBoZWlnaHQ9IjE0LjI1Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjQzNy40MzhweCIgeT0iNjkuOTI1cHgiPlNldDwvdGV4dD4NCg0KICAgIDxyZWN0IGlkPSJidG5DbGlwU3RhcnQiIGNsYXNzPSJDVEwiIHg9IjEwLjEyNSIgeT0iODEuNDcxIiB3aWR0aD0iNTMuMjUiIGhlaWdodD0iMTUuNzUiLz4NCiAgICA8dGV4dCBjbGFzcz0iRiIgeD0iMTQuNzExcHgiIHk9IjkyLjY4NHB4Ij5TdGFydC10aW1lPC90ZXh0Pg0KICAgIDxyZWN0IGlkPSJ0eHRDbGlwU3RhcnQiIGNsYXNzPSJUQiIgeD0iNzAuMDkyIiB5PSI3OS45MDciIHdpZHRoPSIxMTciIGhlaWdodD0iMTYuNSIvPg0KICAgIDxyZWN0IGlkPSJidG5DbGlwU3RhcnREZWNyIiBjbGFzcz0iQ1RMIiB4PSIxOTMuNTkyIiB5PSI3OS45MDciIHdpZHRoPSI1NCIgaGVpZ2h0PSIxNi41Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjIxOC44OTlweCIgeT0iOTEuODAzcHgiPi08L3RleHQ+DQogICAgPHJlY3QgaWQ9ImJ0bkNsaXBTdGFydEluY3IiIGNsYXNzPSJDVEwiIHg9IjI1NC4wOTIiIHk9Ijc5LjkwNyIgd2lkdGg9IjU0IiBoZWlnaHQ9IjE2LjUiLz4NCiAgICA8dGV4dCBjbGFzcz0iRiIgeD0iMjc4LjQ2MXB4IiB5PSI5MS44MDNweCI+KzwvdGV4dD4NCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0YXJ0U2VlayIgY2xhc3M9IkNUTCIgeD0iMzE0LjYyNSIgeT0iNzkuOTA3IiB3aWR0aD0iOTcuNSIgaGVpZ2h0PSIxNi41Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjM1MS42ODhweCIgeT0iOTEuOTI1cHgiPlNlZWs8L3RleHQ+DQoNCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0b3AiIGNsYXNzPSJDVEwiIHg9IjEwLjEyNSIgeT0iMTAzLjIyMSIgd2lkdGg9IjUzLjI1IiBoZWlnaHQ9IjE1Ljc1Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjE0LjcxMXB4IiB5PSIxMTQuMTg0cHgiPlN0b3AtdGltZTwvdGV4dD4NCiAgICA8cmVjdCBpZD0idHh0Q2xpcFN0b3AiIGNsYXNzPSJUQiIgeD0iNzAuMDkyIiB5PSIxMDAuNDA3IiB3aWR0aD0iMTE3IiBoZWlnaHQ9IjE2LjUiLz4NCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0b3BEZWNyIiBjbGFzcz0iQ1RMIiB4PSIxOTMuNTkyIiB5PSIxMDAuNDA3IiB3aWR0aD0iNTQiIGhlaWdodD0iMTYuNSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyMTguODk5cHgiIHk9IjExMS44NjhweCI+LTwvdGV4dD4NCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0b3BJbmNyIiBjbGFzcz0iQ1RMIiB4PSIyNTQuMDkyIiB5PSIxMDAuNDA3IiB3aWR0aD0iNTQiIGhlaWdodD0iMTYuNSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyNzguNDYxcHgiIHk9IjExMS44NjhweCI+KzwvdGV4dD4NCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0b3BTZWVrIiBjbGFzcz0iQ1RMIiB4PSIzMTQuNjI1IiB5PSIxMDAuNDA3IiB3aWR0aD0iOTcuNSIgaGVpZ2h0PSIxNi41Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjM1MS42ODhweCIgeT0iMTExLjkyNXB4Ij5TZWVrPC90ZXh0Pg0KDQogICAgPHJlY3QgaWQ9ImJ0bkNsaXBQbGF5IiBjbGFzcz0iQ1RMIiB4PSIxMC4xMjUiIHk9IjEyMi43ODIiIHdpZHRoPSI1My4yNSIgaGVpZ2h0PSIxNS43NSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyNi43MTFweCIgeT0iMTM0LjE4NHB4Ij5OZXc8L3RleHQ+DQogICAgPHJlY3QgaWQ9ImJ0bkNsaXBOZXciIGNsYXNzPSJDVEwiIHg9IjcwLjA5MiIgeT0iMTIyLjQwNyIgd2lkdGg9IjExNyIgaGVpZ2h0PSIxNi41Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjExNy40NjFweCIgeT0iMTM0LjE4NHB4Ij5QbGF5PC90ZXh0Pg0KICAgIDxyZWN0IGlkPSJidG5DbGlwQWRkIiBjbGFzcz0iQ1RMIiB4PSIxOTMuNTkyIiB5PSIxMjIuNDA3IiB3aWR0aD0iNTQiIGhlaWdodD0iMTYuNSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyMDUuNDM4cHgiIHk9IjEzNC4xODRweCI+VXBkYXRlPC90ZXh0Pg0KICAgIDxyZWN0IGlkPSJidG5DbGlwVXBkYXRlIiBjbGFzcz0iQ1RMIiB4PSIyNTQuMDkyIiB5PSIxMjIuNDA3IiB3aWR0aD0iNTQiIGhlaWdodD0iMTYuNSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyNzIuMjExcHgiIHk9IjEzNC4xODRweCI+QWRkPC90ZXh0Pg0KDQogICAgPHBhdGggZD0iTTEwLjEyNSwxNDguNDA3bDQ2My40NjcsLTAiIGNsYXNzPSJMIi8+DQogICAgPHBhdGggZD0iTTY5LjEyNSw1LjA3N2w0MDQuNDY3LDAiIGNsYXNzPSJMIi8+ICAgIA0KICAgIDxwYXRoIGQ9Ik0wLDBsMCwxNTAuNzUiIGNsYXNzPSJMIi8+DQogICAgPHBhdGggZD0iTTQ4My43NSwwbDAsMTUwLjc1IiBjbGFzcz0iTCIvPg0KDQo8L3N2Zz4="

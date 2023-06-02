@@ -1,5 +1,24 @@
 # changelog
 
+## [0.4.0] - 2023-06-
+
+For details pls see [devlog#202306==](devlog.md#202306==)
+
+### Added
+
+- Implement [Add sort-by-media](https://github.com/pakx/VClipMangler/issues/5)
+
+### Changed
+
+- When sorted byGroup, clips no longer show clip-group in-line (each clip shows title + duration only)
+- Rearrange widgets for sort/filter to reflect they're now interrelated (when sorted byMedia, filter examines clip-title and -uri)
+- Change Filter to compare case-insensitive
+
+### Fixed
+
+- [Group dropdown inconsistently populated](https://github.com/pakx/VClipMangler/issues/4)
+- ["Check for updates" button remains visible even after Help is closed](https://github.com/pakx/VClipMangler/issues/6)
+
 ## [0.3.0] - 2023-05-29
 
 For details pls see [devlog#20230529](devlog.md#20230527)
@@ -37,3 +56,5 @@ For details pls see [devlog#202305210920](devlog.md#202305210920)
 ## [0.1.0] - 2023-05-20
 
 Initial commit
+
+<!-- markdownlint-configure-file {"MD024": false} -->

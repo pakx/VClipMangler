@@ -40,14 +40,12 @@ app.setContext(ctx)
 -- ==================== (no more immediately-run code below this line)
 
 function TestsA01_createModel()
-    --- Tests initializing app w/o ini
+    --- Tests model consistency
     local mdl = app.createModel()
     local env = {mdl = mdl}
 
-    -- check model consistency
-
     local lst = {
-        "'" .. table.concat(mdl.sortCriteria, '.') .."' == 'byGroup.byTitle'"
+        "'" .. table.concat(mdl.sortCriteria, '.') .."' == 'byGroup.byMedia.byTitle'"
         , "mdl.pathSeparator == '"..utils.escapeBackslash(ctx.pathSeparator).."'"
         , "mdl.pthIniOld == '"
             .. utils.escapeBackslash(app.context.vlc.config.userdatadir()
@@ -198,6 +196,8 @@ function TestsB04_newClip()
     }, true)
     lu.assertTrue(yn, "update failed, see: "..msg)
 
+    assert(clip, "valid clip expected")
+
     -- check in-memory clip; should match that from updateClip() above
     lst = {
         "mdl.clip.id == " .. clip.id
@@ -226,9 +226,9 @@ function TestsB04_newClip()
         "#EXTM3U"
         , "#PLAYLIST:"..mdl.consts.NONE
 
-        , "#EXTINF:1000,clip-1-title"
-        , "#EXTVLCOPT:start-time=0"
-        , "#EXTVLCOPT:stop-time=1"
+        , string.format("#EXTINF:%d,clip-1-title", clip.stopTime - clip.startTime)
+        , "#EXTVLCOPT:start-time=" .. clip.startTime
+        , "#EXTVLCOPT:stop-time=" .. clip.stopTime
         , "#EXTGRP:group1"
         , uriClip
     }
