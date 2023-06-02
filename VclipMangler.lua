@@ -1,7 +1,7 @@
 local app = {
     extensionMeta = {
         title = "VClipMangler"
-        , version = "0.4.0"
+        , version = "0.4.1"
         , author = "pakx"
         , url = "https://github.com/pakx/VClipMangler"
         , shortdesc = "Manage Virtual Clips"
@@ -935,18 +935,18 @@ local function createViewHandlers(mdl, acts, vw)
             local sortBy = mdl.sortCriteria[vw.ddSort:get_value()]
             local props = (sortBy == "byMedia") and {"title", "uri"} or {"title"}
             acts.setFilter(rgx, props)
-            showPlaylist()
             vw.lblFilter:set_text(rgx)
             vw.lblCaptionFilter:set_text("Sort/Filter: *")
         end
+        showPlaylist()
     end
 
     h.btnSortFilterClearClick = function()
         acts.clearFilter()
-        showPlaylist()
         vw.lblFilter:set_text("")
         vw.txtFilter:set_text("")
         vw.lblCaptionFilter:set_text("Sort/Filter:")
+        showPlaylist()
     end
 
     h.btnHelpClick = function()

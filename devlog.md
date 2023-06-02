@@ -1,5 +1,10 @@
 # devlog
 
+## 202306021405
+
+- fixed Sort/Filter -> Go being skipped sometimes; this was vecause btnSortFilterClick() called showPlaylist() only on rgx ~= ""; corrected
+- updated to v0.4.1
+
 ## 20230602
 
 - fixed [Group dropdown inconsistently populated](https://github.com/pakx/VClipMangler/issues/4); this was due h.groups being reset every time in showPlaylist(), but being rebuilt only if sorting were "byGroup"; addressed as follows: identified that h.groups need be rebuilt only when  opening a playlist or creating a new one; added param isNew in showPlaylist(isNew), w/ h.groups reset/rebuilt only if isNew == true; still in showPlaylist(), used a new var, `grouping` to track group-type clips-list displays
