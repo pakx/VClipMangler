@@ -183,7 +183,7 @@ function TestsB04_newClip()
         , startTime = 0
         , stopTime = 1
         , group = "group1"
-    }, true)
+    }, true, true)
     lu.assertTrue(not yn, "update should have failed due insufficient clipInfo")
 
     -- update clip w/ all fields; should succeed
@@ -193,7 +193,7 @@ function TestsB04_newClip()
         , startTime = 0
         , stopTime = 1
         , group = "group1"
-    }, true)
+    }, true, true)
     lu.assertTrue(yn, "update failed, see: "..msg)
 
     assert(clip, "valid clip expected")
@@ -303,13 +303,13 @@ function TestsB05_playlist_backup()
     utils.deleteFolder(backupFolder)
 end
 
-function TestC01_genHelpText()
+function TestsC01_genHelpText()
     local mdl = app.createModel()
     local html = app.genHelpText(mdl)
     lu.assertTrue(html ~= nil)
 end
 
 -- run all tests: lua {thisfile.lua}
--- run specific, e.g: lua {thisfile.lua} --p TestsB
+-- run specific test by [partial-]name, e.g: lua {thisfile.lua} -p TestsB
 local lu2 = lu.LuaUnit.new()
 os.exit( lu2:runSuite() )

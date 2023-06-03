@@ -1,8 +1,23 @@
 # devlog
 
+## 20230603
+
+- fixed [Sometimes on clicking "Add" both newly-added and added-just-previously clips are set to same title, etc](https://github.com/pakx/VClipMangler/issues/7), as follows:
+  - the underlying reason for this was due the current clip, i.e. mdl.clip, being added directly to the clips-list
+  - thus after a first Add, mdl.clip pointed to the newly-added clip in the clips-list
+  - further edits to the current clip affected mdl.clip (aka the clip in clips-list)
+  - the next Add, depending on forgoing edits, resulted in the second-added clip and the first-added clip above both showing similar edits
+  - the "sometimes" in the issue depended on whether view-edits invoked acts.updateClip() before the Add button were clicked: if it did, such as when using the time-adjust buttons, it resulted in mdl.clip being modified (and reflected in the clip in the clips-list); if acts.updateClip() were not called before the Add button (e.g. times were typed into the textbox) the issue didn't show
+  - addressed as follows: acts.updateClip(): on saveToList, after successful save set mdl.clip to a copy of what was saved; note that on Select we were already setting mdl-clip to a copy of the selected clip rather than to the clip itself
+- updated TestsB04_newClip(); prior version, which shouldn't have passed, didn't have `asNew=true` in the call following "update clip w/ all fields; should succeed"
+- showPlaylist(): edited sorting to be case-insensitive (sort everything lowercase)
+- app.utils.dump(): simplified
+- clips-list: moved per-clip glyphs to beginning of line so they're seen more easily
+- updated to v0.4.2
+
 ## 202306021405
 
-- fixed Sort/Filter -> Go being skipped sometimes; this was vecause btnSortFilterClick() called showPlaylist() only on rgx ~= ""; corrected
+- fixed Sort/Filter -> Go being skipped sometimes; this was because btnSortFilterClick() called showPlaylist() only on rgx ~= ""; corrected
 - updated to v0.4.1
 
 ## 20230602

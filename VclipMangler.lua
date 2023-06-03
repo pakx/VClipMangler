@@ -1,7 +1,7 @@
 local app = {
     extensionMeta = {
         title = "VClipMangler"
-        , version = "0.4.1"
+        , version = "0.4.2"
         , author = "pakx"
         , url = "https://github.com/pakx/VClipMangler"
         , shortdesc = "Manage Virtual Clips"
@@ -437,38 +437,36 @@ app.createActions = function(mdl)
     end
 
     acts.updateClip = function(clipInfo, saveToList, asNew)
-        --- Updates mdl.clip + optionally saves to mdl.playlist
+        --- Updates mdl.clip + optionally saves to mdl.playlist.clips
         --- @clipInfo describes a clip; @see acts.createClip()
-        --- @saveToList true/false updates or adds-to mdl.playlist.clips
-        --- @asNew true/false tells if mdl.clip should be added to mdl.playlist.clips
-        ---   as a new clip w/ a new id; use when creating multiple clips from same media
+        --- @saveToList true/false saves to mdl.playlist.clips
+        --- @asNew true/false tells whether to save mdl.clip to mdl.playlist.clips
+        ---   as a new clip w/ a new id
         --- Returns ok, errMsg, clip
-        local yn, msg, clip
-        if asNew then
-            clip = createClip(mdl.clip)
-            clip.id, clip.isNew, clip.isInList = genId(), true, false
-        else
-            clip = mdl.clip
-        end
+        local yn, msg, clip = false, nil, mdl.clip
         if not clip then return false, mdl.consts.ERR_CLIP_NONE end
 
+        -- apply edits to mdl.clip
         local ci = clipInfo
-        yn = false
         for _, k in pairs({"title", "uri", "startTime", "stopTime", "group"}) do
             if clip[k] ~= ci[k] then clip[k] = ci[k]; yn = true end
         end
-        clip.hasEdits = clip.hasEdits or yn
-        clip.hasEditsInVw = clip.hasEditsInVw or yn
 
-        mdl.clip = clip
+        if yn then
+            clip.hasEdits     = true
+            clip.hasEditsInVw = true
+        end
 
         yn, msg = clip.isOk()
         if not yn then return yn, msg end
 
         if saveToList then
-            if clip.isNew and not clip.isInList then
-                table.insert(mdl.playlist.clips, clip)
+            if asNew then
+                clip.id = genId()
+                clip.isNew = true
                 clip.isInList = true
+
+                table.insert(mdl.playlist.clips, clip)
             else
                 local k, _ = findClipById(clip.id)
                 if k then
@@ -479,8 +477,12 @@ app.createActions = function(mdl)
                     return false, msg
                 end
             end
+
             clip.hasEditsInVw = false
             if clip.isNew then clip.hasEdits = false end
+
+            -- set mdl.clip to a copy of what was saved
+            mdl.clip = createClip(clip)
         end
 
         if mdl.filter then acts.setFilter(mdl.filter, mdl.filterProps) end
@@ -592,21 +594,26 @@ local function createViewHandlers(mdl, acts, vw)
         local sortMeta = {
             byGroup = {
                 fn = function(a, b)
-                    return a.group == b.group and a.title < b.title or a.group < b.group
+                    return string.lower(a.group) == string.lower(b.group)
+                        and string.lower(a.title) < string.lower(b.title)
+                        or string.lower(a.group) < string.lower(b.group)
                 end
                 , lpad = string.rep(" ", 10)
             }
             , byMedia = {
                 fn = function(a, b)
                     return a.uri == b.uri
-                        and (a.startTime == b.startTime and a.title < b.title or a.startTime < b.startTime)
+                        and (a.startTime == b.startTime
+                            and string.lower(a.title) < string.lower(b.title)
+                            or a.startTime < b.startTime
+                        )
                         or a.uri < b.uri
                 end
                 , lpad = string.rep(" ", 10)
             }
             , byTitle = {
                 fn = function(a, b)
-                    return a.title < b.title
+                    return string.lower(a.title) < string.lower(b.title)
                 end
                 , lpad = string.rep(" ", 5)
             }
@@ -685,10 +692,10 @@ local function createViewHandlers(mdl, acts, vw)
             end
 
             local leader = string.sub(idx .. sepIdx .. sm.lpad, 1, string.len(sm.lpad))
-            local glyphs = (clip.isNew and "+" or "")..(clip.hasEdits and "*" or "")
+            local glyphs = (clip.isNew and "+" or "")..((clip.hasEdits) and "*" or "")
             txt = leader
-                .. clip.title
                 .. ((glyphs ~= "") and (glyphs.." ") or "")
+                .. clip.title
                 .. txt
 
             vw.lstClip:add_value(txt, clipId)
@@ -1317,22 +1324,19 @@ app.utils = {
 
         elseif type(var) == 'table' then
             for k, v in pairs(var) do
-                local formatting = string.rep("  ", indent) .. k .. ":"
-                if type(v) == "table" then
-                    print(formatting)
+                local leader = string.rep("  ", indent) .. k .. ": "
+                local typ = type(v)
+                if typ == "table" then
+                    print(leader)
                     app.utils.dump(v, indent+1)
-                elseif type(v) == 'boolean' then
-                    print(formatting .. tostring(v))
-                elseif type(v) == 'function' then
-                    print(formatting .. type(v))
-                elseif type(v) == 'userdata' then
-                    print(formatting .. type(v))
+                elseif typ == 'function' or typ == 'userdata' then
+                    print(leader .. typ)
                 else
-                    print(formatting .. v)
+                    print(leader .. tostring(v))
                 end
             end
         else
-            print(var)
+            print(tostring(var))
         end
     end
 
