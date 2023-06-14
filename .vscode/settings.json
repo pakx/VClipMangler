@@ -1,7 +1,8 @@
 {
     "filewatcher.commands": [
+    
         {
-            "match": "VclipMangler.lua",
+            "match": "VClipMangler.lua",
             "isAsync": true,
             "cmd": "copy ${file} C:\\ProgramFiles\\vlc-3.0.18\\lua\\extensions\\",
             "event": "onFileChange"

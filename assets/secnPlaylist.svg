@@ -22,7 +22,7 @@
             <path d="M9.889,15.662l1.855,-6.285m4.25,6.285l-2.04,-6.285" style="fill:none;stroke:#b0b4b7;stroke-width:0.46px;"/>
             <path d="M12.296,7.307l1.143,0l0.515,2.07l-2.21,-0.001l0.552,-2.069Z" class="OF"/>
         </g>
-        <text x="21.592px" y="18.407px" class="F">VclipMangler</text>
+        <text x="21.592px" y="18.407px" class="F">VClipMangler</text>
     </g>
 
     <rect x="69.375" y="57.096" width="238.5" height="16.5" id="dd" class="CTL"/>

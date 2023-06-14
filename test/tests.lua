@@ -16,12 +16,12 @@
     - all tests are currently in this one file
     - tests run outside VLC. However since the extension expects to find vlc,
       we supply a stub via a "context", hence the require("_context") below
-    - tests exercise model (TestsA*) and actions (TestsB*);
+    - tests exercise model (Test*A*) and actions (Test*B*);
       there are minimal tests for view (TestsC*)
     -
     - luaunit seems to run tests alphabetically; maybe there's a setting I've missed;
       hence the alphabetical/numbered naming
-    - test functions below are exercise use cases of multiple actions; each use case
+    - test functions below exercise use cases of multiple actions; each use case
       "should" be in a test suite, but luaunit's suite-support seems weak (or perhaps
       I've misread again)
 ]]
@@ -30,17 +30,91 @@
 local lu = require("luaunit")
 local ctx = require("_context")
 local utils = require("_utils")
--- get VclipMangler from parent folder
+-- get VClipMangler from parent folder
 package.path = package.path .. ";" .. utils.getCurrentDir().."/.." .."/?.lua"
-local app = require("VclipMangler")
+local app = require("VClipMangler")
 local apputils = app.utils
 
 app.setContext(ctx)
 
--- ==================== (no more immediately-run code below this line)
+-- (no more immediately-run code, except tests runner at eof)
+-- ====================
 
-function TestsA01_createModel()
-    --- Tests model consistency
+local function writeSamplePlaylist(pth)
+    local txt = [[
+        #EXTM3U
+        #PLAYLIST:{playlist title not set}
+        
+        #EXTINF:1,apple
+        #EXTVLCOPT:start-time=0
+        #EXTVLCOPT:stop-time=1
+        #EXTGRP:fruit
+        file:///G:/multimedia/apple.mp4
+        
+        #EXTINF:1,battle
+        #EXTVLCOPT:start-time=0
+        #EXTVLCOPT:stop-time=2
+        #EXTGRP:event
+        file:///G:/multimedia/battle.mp4
+        
+        #EXTINF:1,cattle
+        #EXTVLCOPT:start-time=0
+        #EXTVLCOPT:stop-time=3
+        #EXTGRP:animal
+        file:///G:/multimedia/cattle.mp4
+    ]]
+    apputils.writeTextToFile(txt, pth)
+end
+
+function TestCoverage()
+    --- Tests test-coverage; currently we expect coverage for:
+    --- - actions.{public functions}
+    ---
+    --- To do this we make a list of public functions in, say, `actions`,
+    --- then check off those functions called in this file; what remains
+    --- is not covered by a test.
+    ---
+    --- Note: we don't build an AST of this file, so for this to work we
+    --- need to adhere to the following conventions:
+    --- - actions: functions must be called via a var named "acts"
+    local fns = {}
+
+    -- collect all acts.{public functions}
+    local acts = app.createActions(app.createModel())
+    for k, v in pairs(acts) do
+        if type(v) == "function" then fns["acts."..k] = true end
+    end
+
+    -- remove from above list `acts` functions called in this file
+    local info = debug.getinfo(1, 'S');
+    local _, thisFile, _ = apputils.SplitFilename(string.sub(info.source, 2))
+
+    local fd = assert(io.open(thisFile))
+    for line in fd:lines() do
+        local s, _, fn = string.find(line, "(acts%.[^%s%(]+)%(")
+        if s then
+            fns[fn] = nil
+        end
+    end
+    fd:close()
+
+    -- if all functions called, expect empty list
+    local ok = (next(fns) == nil)
+    local msg = "these functions not covered: "
+
+    if not ok then
+        local lst = {}
+        for k, _ in pairs(fns) do
+            table.insert(lst, k)
+        end
+        msg = msg .. table.concat(lst, ", ")
+    end
+
+    lu.assertTrue(ok, msg)
+end
+
+function TestUsecaseA01_initial_model()
+    --- Tests an initially-created model
     local mdl = app.createModel()
     local env = {mdl = mdl}
 
@@ -63,7 +137,8 @@ function TestsA01_createModel()
     utils.runStrings(lst, env, lu)
 end
 
-function TestsB01_initializeApp_withoutIni()
+function TestUsecaseB01_initialize_app_wo_ini()
+    --- Tests initializing app w/o an existing ini-file
     local mdl = app.createModel()
     local acts = app.createActions(mdl)
 
@@ -74,8 +149,8 @@ function TestsB01_initializeApp_withoutIni()
     lu.failIf(not apputils.fileExists(mdl.pthIni), msg)
 end
 
-function TestsB02_initializeApp_withIni()
-    --- Tests initializing app w/ ini
+function TestUsecaseB02_initialize_app_wi_ini()
+    --- Tests initializing app w/ an existing ini-file
     local mdl = app.createModel()
     local acts = app.createActions(mdl)
     local env = {mdl = mdl}
@@ -86,7 +161,7 @@ function TestsB02_initializeApp_withIni()
         , "playlist=playlist-1"
         , "playlist=playlist-2"
     }
-    apputils.lstToFile(lst, mdl.pthIni)
+    apputils.writeLstToFile(lst, mdl.pthIni)
 
     acts.initializeApp()
 
@@ -100,8 +175,8 @@ function TestsB02_initializeApp_withIni()
     utils.runStrings(lst, env, lu)
 end
 
-function TestsB03_newPlaylist()
-    --- Tests creating/saving new playlist
+function TestUsecaseB03_new_playlist()
+    --- Tests creating/saving a new playlist
     local mdl = app.createModel()
     local acts = app.createActions(mdl)
 
@@ -156,7 +231,7 @@ function TestsB03_newPlaylist()
     assert(os.remove(pthPlaylist))
 end
 
-function TestsB04_newClip()
+function TestUsecaseB04_new_clip()
     --- Tests creating/saving a new clip
     local mdl = app.createModel()
     local acts = app.createActions(mdl)
@@ -247,7 +322,7 @@ function TestsB04_newClip()
     end
 end
 
-function TestsB05_playlist_backup()
+function TestUsecaseB05_playlist_rolling_backup()
     --- Tests playlist backups
     local mdl = app.createModel()
     local acts = app.createActions(mdl)
@@ -283,7 +358,7 @@ function TestsB05_playlist_backup()
         local pth =  backupFolder ..  mdl.pathSeparator .. "newPlaylist_bak"
             .. os.date("%Y%m%d%H%M%S", (now - 5 * i))
             .. ".m3u"
-        apputils.lstToFile(lst, pth)
+        apputils.writeLstToFile(lst, pth)
     end
 
     -- (save again ...)
@@ -303,7 +378,147 @@ function TestsB05_playlist_backup()
     utils.deleteFolder(backupFolder)
 end
 
-function TestsC01_genHelpText()
+function TestUsecaseB06_open_playlist()
+    --- Open an existing playlist
+    local mdl = app.createModel()
+    local acts = app.createActions(mdl)
+
+    local playlistFolder, _, _ = apputils.SplitFilename(mdl.pthIni)
+    local pthPlaylist = playlistFolder.."playlist.m3u"
+
+    local lst, txtExpected, txt, msg
+    local env = {mdl = mdl}
+
+    -- write sample playlist to file
+    writeSamplePlaylist(pthPlaylist)
+
+    acts.openPlaylist(pthPlaylist)
+
+    -- check in-memory model
+    lst = {
+        "mdl.playlist ~= nil"
+        , "not mdl.playlist.isNew"
+        , "#mdl.playlist.clips == 3"
+        , "mdl.playlist.clips[1].title == 'apple'"
+        , "mdl.playlist.clips[1].group == 'fruit'"
+        , "mdl.playlist.clips[1].stopTime == 1"
+
+        , "mdl.playlist.clips[2].title == 'battle'"
+        , "mdl.playlist.clips[2].group == 'event'"
+        , "mdl.playlist.clips[2].stopTime == 2"
+
+        , "mdl.playlist.clips[3].title == 'cattle'"
+        , "mdl.playlist.clips[3].group == 'animal'"
+        , "mdl.playlist.clips[3].stopTime == 3"
+    }
+    utils.runStrings(lst, env, lu)
+
+    os.remove(mdl.pthIni)
+    os.remove(pthPlaylist)
+end
+
+function TestUsecaseB07_filters()
+    --- Test setting/clearing filters
+    local mdl = app.createModel()
+    local acts = app.createActions(mdl)
+
+    local playlistFolder, _, _ = apputils.SplitFilename(mdl.pthIni)
+    local pthPlaylist = playlistFolder.."playlist.m3u"
+
+    local lst, txtExpected, txt, msg
+    local env = {mdl = mdl}
+
+    -- write sample playlist to file
+    writeSamplePlaylist(pthPlaylist)
+
+    acts.openPlaylist(pthPlaylist)
+    lu.assertTrue(mdl.playlist.filteredClips == nil)
+
+    acts.setFilter("App") -- should compare lowercase
+    lst = {
+        "#mdl.playlist.filteredClips == 1"
+        , "mdl.playlist.filteredClips[1].title == 'apple'"
+    }
+    utils.runStrings(lst, env, lu)
+
+    acts.clearFilter()
+    lu.assertTrue(mdl.playlist.filteredClips == nil)
+
+    acts.setFilter("ttl")
+    lst = {
+        "#mdl.playlist.filteredClips == 2"
+        , "mdl.playlist.filteredClips[1].title == 'battle'"
+        , "mdl.playlist.filteredClips[2].title == 'cattle'"
+    }
+    utils.runStrings(lst, env, lu)
+
+    os.remove(mdl.pthIni)
+    os.remove(pthPlaylist)
+end
+
+function TestUsecaseB08_setByClipId()
+    --- Set mdl.clip to a specific clip from playlist.clips
+    local mdl = app.createModel()
+    local acts = app.createActions(mdl)
+
+    local playlistFolder, _, _ = apputils.SplitFilename(mdl.pthIni)
+    local pthPlaylist = playlistFolder.."playlist.m3u"
+
+    local lst, txtExpected, txt, msg
+    local env = {mdl = mdl}
+
+    writeSamplePlaylist(pthPlaylist)
+    acts.openPlaylist(pthPlaylist)
+
+    lu.assertTrue(mdl.clip == nil)
+
+    local idx = 3
+    local id = mdl.playlist.clips[idx].id
+    acts.setClipById(id)
+    lst = {
+        "mdl.clip.id == " .. id
+        , string.format("mdl.clip.title == '%s'", mdl.playlist.clips[idx].title)
+    }
+    utils.runStrings(lst, env, lu)
+
+    os.remove(mdl.pthIni)
+    os.remove(pthPlaylist)
+end
+
+function TestUsecaseB09_deleteByClipId()
+    --- Delete specific clip from playlist.clips
+    local mdl = app.createModel()
+    local acts = app.createActions(mdl)
+
+    local playlistFolder, _, _ = apputils.SplitFilename(mdl.pthIni)
+    local pthPlaylist = playlistFolder.."playlist.m3u"
+
+    local lst
+    local env = {mdl = mdl}
+
+    writeSamplePlaylist(pthPlaylist)
+    acts.openPlaylist(pthPlaylist)
+
+    lst = {
+        "#mdl.playlist.clips == 3"
+        , "mdl.playlist.clips[1].title .. mdl.playlist.clips[2].title .. mdl.playlist.clips[3].title == 'applebattlecattle'"
+    }
+    utils.runStrings(lst, env, lu)
+
+    local idx = 2
+    local id = mdl.playlist.clips[idx].id
+    acts.deleteClipById(id)
+    lst = {
+        "#mdl.playlist.clips == 2"
+        , "mdl.playlist.clips[1].title .. mdl.playlist.clips[2].title == 'applecattle'"
+    }
+    utils.runStrings(lst, env, lu)
+
+    os.remove(mdl.pthIni)
+    os.remove(pthPlaylist)
+end
+
+function TestC01_genHelpText()
     local mdl = app.createModel()
     local html = app.genHelpText(mdl)
     lu.assertTrue(html ~= nil)

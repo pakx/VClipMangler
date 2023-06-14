@@ -1,7 +1,7 @@
 local app = {
     extensionMeta = {
         title = "VClipMangler"
-        , version = "0.4.2"
+        , version = "0.5.0"
         , author = "pakx"
         , url = "https://github.com/pakx/VClipMangler"
         , shortdesc = "Manage Virtual Clips"
@@ -29,8 +29,9 @@ local app = {
         , testedEnvironments = "VLC 3.0.16/Win10 Prof, VLC 3.0.18/Win10 Prof"
     }
 
-    , context       = nil -- used when running tests outside of VLC; see setContext()
-    , view          = nil
+    , context = nil -- used when running tests outside of VLC; see setContext()
+    , mdl     = nil
+    , view    = nil
 }
 
 ---==================== VLC-called functions
@@ -43,9 +44,19 @@ function activate()
     local mdl = app.createModel()
     local acts = app.createActions(mdl)
     app.view = app.createView(mdl, acts)
+    app.mdl = mdl
+
+    if mdl.appCfg.cmdOnActivate then
+        os.execute(mdl.appCfg.cmdOnActivate)
+    end
 end
 
 function close()
+    local mdl = app.mdl or {}
+
+    if mdl.appCfg.cmdOnClose then
+        os.execute(mdl.appCfg.cmdOnClose)
+    end
     vlc.deactivate()
 end
 
@@ -108,7 +119,9 @@ app.createModel = function()
     mdl.pthIni          = vlc.config.homedir() .. mdl.pathSeparator .. mdl.extensionMeta.title .. ".ini"
     mdl.appCfg          = {
         backupCount = mdl.consts.DEF_BACKUP_COUNT
-        , playlists = {}
+        , cmdOnActivate = nil
+        , cmdOnDeactivate = nil
+        , playlists     = {}
         -- see genHelpText() for other settings
     }
     mdl.errs            = {}  -- todo: implement err-messaging
@@ -163,7 +176,7 @@ app.createActions = function(mdl)
             table.insert(lst, "playlist=" .. v)
         end
 
-        app.utils.lstToFile(lst, pth)
+        app.utils.writeLstToFile(lst, pth)
     end
 
     local function readPlaylistM3u(pth)
@@ -245,7 +258,7 @@ app.createActions = function(mdl)
             playlist.path, mdl.appCfg.backupCount, mdl.appCfg.backupFolder)
         -- todo: add debug-level and messaging
 
-        app.utils.lstToFile(lst, playlist.path)
+        app.utils.writeLstToFile(lst, playlist.path)
     end
 
     local function genId()
@@ -328,12 +341,12 @@ app.createActions = function(mdl)
         ---   or one read from an m3u file (@see readPlaylistM3u())
         local pi = playlistInfo
         local pl = {
-            isNew = pi.isNew or false
-            , hasDeletes = false
+            isNew           = pi.isNew or false
+            , hasDeletes    = false
 
-            , title = pi.title or mdl.consts.NONE
-            , path = pi.path
-            , clips = {}
+            , title         = pi.title or mdl.consts.NONE
+            , path          = pi.path
+            , clips         = {}
             , filteredClips = nil
         }
 
@@ -352,7 +365,7 @@ app.createActions = function(mdl)
         -- convert tracks to clips
         if pi.tracks then
             for _, trk in pairs(pi.tracks) do
-                local clip = createClip(nil,trk)
+                local clip = createClip(nil, trk)
                 table.insert(pl.clips, clip)
             end
         end
@@ -362,8 +375,8 @@ app.createActions = function(mdl)
 
     local function setPlaylist(playlist)
         --- Translates from external playlist (eg m3u) to playlist of clips
-        --- @playlist: see acts.createPlaylist() for expected props
-        ---   This may be data returned from an externally-read playlist
+        --- @playlist: see acts.createPlaylist() for expected props;
+        ---   usually this is data read from a playlist saved to file
         --- @see readPlaylistM3u()
         local pl = createPlaylist(playlist)
 
@@ -1354,11 +1367,9 @@ app.utils = {
         return os.getenv("PWD") or io.popen("cd"):read()
     end
 
-    , lstToFile = function(lst, pth, rsep)
+    , writeLstToFile = function(lst, pth, rsep)
         if not rsep then rsep = "\n" end
-        local fd = assert(io.open (pth, "w"))
-        fd:write(table.concat(lst, rsep))
-        fd:close()
+        app.utils.writeTextToFile(table.concat(lst, rsep), pth)
     end
 
     , scandir = function(directory, filenameRegex)
@@ -1389,6 +1400,12 @@ app.utils = {
         local pathSeparator = package and package.config:sub(1,1) or "/"
         if pathSeparator ~= "/" and string.find(pthFile, "/") then pthFile = string.gsub(pthFile, "/", pathSeparator) end
         return string.match(pthFile, "(.-)([^"..pathSeparator.."]-([^"..pathSeparator.."%.]+))$")
+    end
+
+    , writeTextToFile = function(txt, pth)
+        local fd = assert(io.open (pth, "w"))
+        fd:write(txt)
+        fd:close()
     end
 
     , trim2 = function(s)
@@ -1428,6 +1445,7 @@ app.genHelpText = function(mdl)
             *{color:#444;font-family:Verdana;font-size:11pt;}
             ico{font-size:15pt;font-weight:bold;}
             kw{font-weight:bold;}
+            .offsetLi{margin-top:1em;}
             .title{color:black;font-weight:bold;}
             .panel{border:1px solid grey;padding:20px;}
             .secn{color:black;display:block;font-weight:bold;}
@@ -1440,13 +1458,13 @@ app.genHelpText = function(mdl)
 
             <p>Note: extension usage should be discoverable, if not immediately intuitive
             due limitations of the default UI widgets in Lua extensions (at least best I
-            can tell). 
+            can tell).
             For example, to edit an element in a list we'd usually just double-click it
             to indicate selection + edit, whereas here lacking a readily usable click event
             we click the element in the list, then click a Select button to act on it.</p>
 
             <p> Please file bugs, suggestions, etc at <a href="{=xm.url}/issues">
-            {=xm.url}/issues</a>
+            {=xm.url}/issues</a></p>
 
             <p>A short usage guide follows.</p>
 
@@ -1456,6 +1474,13 @@ app.genHelpText = function(mdl)
                 created when the extension is started. Available settings are:</p>
 
                 <ul>
+                    <li>optional: <kw>cmdOnActivate</kw>=command to run via VLC's os.execute() when extension is
+                    activated; <i>this can be any command, and potentially harmful -- caveat emptor</i>;
+                    pls see Miscellaneous Notes/Maintaining Window Size below</li>
+                    <li>optional: <kw>cmdOnClose</kw>=command to run via VLC's os.execute() when extension is
+                    closed; <i>this can be any command, and potentially harmful -- caveat emptor</i>;
+                    pls see Miscellaneous Notes/Maintaining Window Size below</li>
+
                     <li><kw>backupCount</kw>=number of backups to keep when saving a playlist;
                     defaults to {=mdl.consts.DEF_BACKUP_COUNT}</li>
 
@@ -1474,7 +1499,7 @@ app.genHelpText = function(mdl)
                     <br/>playList=C:\projects\playlists\fancier-kookery-techniques.m3u</li>
                 </ul>
 
-                <p><ico>{=icoWarn}</ico> Settings other than the above will be discarded on save</p>
+                <p><ico>{=icoWarn}</ico> Settings other than the above may be discarded on save</p>
             </p>
 
             <p><span class="secn">Creating your first playlist</span>
@@ -1511,7 +1536,7 @@ app.genHelpText = function(mdl)
                         indicates edits</li>
 
                     <li>back in the Playlist section, click Save; this actually saves the playlist to
-                        file, and updates the ini-file so the next time you open ({=xm.title} the
+                        file, and updates the ini-file so the next time you open {=xm.title} the
                         playlist will appear in the playlists dropdown</li>
                 </ol>
             </p>
@@ -1534,6 +1559,13 @@ app.genHelpText = function(mdl)
                     this avoids thence updating an incorrect clip (due how we manage clip ids).</li>
                     <li>currently there are no facilities to delete playlists, or to open ones not
                     previously created by {=xm.title}; to do either pls edit the ini-file directly</li>
+
+                    <li class="offsetLi">Maintaining Window Size: one nuisance w/ the current extension is that it
+                    resizes to a VLC-managed default on most interactions; a low-tech workaround
+                    is to use an app or script to resize the extension window if below a minimum size;
+                    the newly-added <kw>cmdOnActivate</kw> and <kw>cmdOnClose</kw> ini-settings
+                    facilitate this; for more detail pls see <a href="{=xm.url}#maintaining-window-size">
+                    {=xm.url}#maintaining-window-size</a></li>
                 </ul>
             </p>
 
@@ -1566,9 +1598,9 @@ app.getImages = function()
     --- to be concatenated to the main file during a build process, ergo this
     --- being toward the end if the main file.
     return {
-        ["pnlNewPlaylist"] = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4NCjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDQ4NCA5MCIgdmVyc2lvbj0iMS4xIg0KICAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyINCiAgICB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSINCiAgICB4bWxuczpzZXJpZj0iaHR0cDovL3d3dy5zZXJpZi5jb20vIiBzdHlsZT0iZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1taXRlcmxpbWl0OjEuNTsiPg0KICAgIDxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+PCFbQ0RBVEFbDQogICAgLkJHe2ZpbGw6I0YwRjBGMDtzdHJva2U6bm9uZTt9DQogICAgLkNUTHtmaWxsOiNFMUUxRTE7c3Ryb2tlOiNBREFEQUQ7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkZ7Zm9udC1mYW1pbHk6J0FyaWFsTVQnLCAnQXJpYWwnLCBzYW5zLXNlcmlmO2ZvbnQtc2l6ZToxMHB4O30NCiAgICAuTHtmaWxsOm5vbmU7c3Ryb2tlOiMwMDA7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLk9Ge2ZpbGw6I2YzODAwMDtzdHJva2U6I2YzODAwMDtzdHJva2Utd2lkdGg6MC43NXB4O30NCiAgICAuVEJ7ZmlsbDojRkZGO3N0cm9rZTojN0E3QTdBO3N0cm9rZS13aWR0aDowLjc1cHg7fQ0KXV0+PC9zdHlsZT4NCg0KICAgIDxyZWN0IGNsYXNzPSJCRyIgeD0iMCIgeT0iMjciIHdpZHRoPSI0ODMiIGhlaWdodD0iNjIiLz4NCiAgICA8cmVjdCBpZD0iYm9yZGVyIiB4PSIwLjM3NSIgeT0iMC4zNzUiIHdpZHRoPSI0ODIuOTg0IiBoZWlnaHQ9Ijg5LjI1IiBjbGFzcz0iTCIvPg0KICAgIDxnIGlkPSJ0aXRsZWJhciI+DQogICAgICAgIDxwYXRoIGlkPSJzeXMiIGNsYXNzPSJMIiBkPSJNNDI3LjQxMSwxMC43MjhsMCw2Ljg3NWw2LjUsLTBsMC4yNSwtNi44NzVsLTYuNzUsLTBabS0zMywzLjQzN2w2LDBtNjEuNSwtMy40MzdsNy4yNSw2Ljg3NW0wLC02Ljg3NWwtNi4yNSw2Ljg3NSIvPg0KICAgICAgICA8ZyBpZD0ibG9nbyI+DQogICAgICAgICAgICA8cGF0aCBkPSJNOS42MTEsMTUuNjYybC0xLjA4NiwwbC0xLjAyOSw0LjM0M2wxMC44LDAuMDczbC0wLjk1MiwtNC40MTZsLTEuMjM5LDBjMCwwIC0xLjEwNCwxLjc0MSAtMi45NTUsMS43NzNjLTIuNDIsMC4wNDMgLTMuNTM5LC0xLjc3MyAtMy41MzksLTEuNzczWiIgY2xhc3M9Ik9GIi8+DQogICAgICAgICAgICA8cGF0aCBkPSJNOS43MzksMTYuMTFsLTAuMzkzLDEuNTE3Yy0wLDAgMS4wMzksMS4wNjUgMy42MDgsMS4wMTVjMi41MDksLTAuMDUgMy43MSwtMS4zMjYgMy43MSwtMS4zMjZsLTAuNTA2LC0xLjI5NiIgc3R5bGU9ImZpbGw6bm9uZTtzdHJva2U6I2FjNDAwMDtzdHJva2Utd2lkdGg6MC40NnB4OyIvPg0KICAgICAgICAgICAgPHBhdGggZD0iTTExLjIyNSwxMi4wNDhsMy4zMzQsLTAuMDI4bDAuNjUyLDIuMTQ1bC00LjUxNSwtMGwwLjUyOSwtMi4xMTdaIiBjbGFzcz0iT0YiLz4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik05Ljg4OSwxNS42NjJsMS44NTUsLTYuMjg1bTQuMjUsNi4yODVsLTIuMDQsLTYuMjg1IiBzdHlsZT0iZmlsbDpub25lO3N0cm9rZTojYjBiNGI3O3N0cm9rZS13aWR0aDowLjQ2cHg7Ii8+DQogICAgICAgICAgICA8cGF0aCBkPSJNMTIuMjk2LDcuMzA3bDEuMTQzLDBsMC41MTUsMi4wN2wtMi4yMSwtMC4wMDFsMC41NTIsLTIuMDY5WiIgY2xhc3M9Ik9GIi8+DQogICAgICAgIDwvZz4NCiAgICAgICAgPHRleHQgeD0iMjEuNTkycHgiIHk9IjE4LjQwN3B4IiBjbGFzcz0iRiI+VmNsaXBNYW5nbGVyPC90ZXh0Pg0KICAgIDwvZz4NCiAgICA8ZyAgPg0KICAgICAgICA8cmVjdCB4PSI4Ljk2OSIgeT0iMzEuOTczIiB3aWR0aD0iNDY0LjA0OSIgaGVpZ2h0PSI1My4wNTUiIGNsYXNzPSJUQiIvPg0KICAgICAgICA8cmVjdCB4PSI4Ljk2OSIgeT0iNjYuMDk4IiB3aWR0aD0iMjk5LjQyNCIgaGVpZ2h0PSIxNS4zNjgiIGNsYXNzPSJUQiIvPg0KICAgICAgICA8cmVjdCB4PSIzMTUuMTU2IiB5PSI2Ni4wOTgiIHdpZHRoPSI5OC4wNDkiIGhlaWdodD0iMTUuMzY4IiBjbGFzcz0iQ1RMIi8+DQogICAgICAgIDxyZWN0IHg9IjQxOC4wOTQiIHk9IjY2LjA5OCIgd2lkdGg9IjU0LjkyNCIgaGVpZ2h0PSIxNS4zNjgiIGNsYXNzPSJDVEwiLz4NCg0KICAgICAgICA8dGV4dCB4PSIxMS44NDJweCIgeT0iNDQuNjU3cHgiIGNsYXNzPSJGIj5FbnRlciBmdWxsIHBhdGggdG8gbTN1IHBsYXlsaXN0IHRvIGNyZWF0ZTo8L3RleHQ+DQogICAgICAgIDx0ZXh0IHg9IjExLjg0MnB4IiB5PSI3OS4zNjJweCIgY2xhc3M9IkYiPkM6XFByb2plY3RzXHBsYXlsaXN0c1xteS3vrIFyc3QtcGxheWxpc3QubTN1PC90ZXh0Pg0KICAgICAgICA8dGV4dCB4PSIzNTYuNzI0cHgiIHk9Ijc3LjM2NHB4IiBjbGFzcz0iRiI+T0s8L3RleHQ+DQogICAgICAgIDx0ZXh0IHg9IjQzMC40MTJweCIgeT0iNzcuMzY0cHgiIGNsYXNzPSJGIj5DYW5jZWw8L3RleHQ+DQogICAgPC9nPg0KPC9zdmc+DQoNCg=="
+        ["pnlNewPlaylist"] = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4NCjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDQ4NCA5MCIgdmVyc2lvbj0iMS4xIg0KICAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyINCiAgICB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSINCiAgICB4bWxuczpzZXJpZj0iaHR0cDovL3d3dy5zZXJpZi5jb20vIiBzdHlsZT0iZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1taXRlcmxpbWl0OjEuNTsiPg0KICAgIDxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+PCFbQ0RBVEFbDQogICAgLkJHe2ZpbGw6I0YwRjBGMDtzdHJva2U6bm9uZTt9DQogICAgLkNUTHtmaWxsOiNFMUUxRTE7c3Ryb2tlOiNBREFEQUQ7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkZ7Zm9udC1mYW1pbHk6J0FyaWFsTVQnLCAnQXJpYWwnLCBzYW5zLXNlcmlmO2ZvbnQtc2l6ZToxMHB4O30NCiAgICAuTHtmaWxsOm5vbmU7c3Ryb2tlOiMwMDA7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLk9Ge2ZpbGw6I2YzODAwMDtzdHJva2U6I2YzODAwMDtzdHJva2Utd2lkdGg6MC43NXB4O30NCiAgICAuVEJ7ZmlsbDojRkZGO3N0cm9rZTojN0E3QTdBO3N0cm9rZS13aWR0aDowLjc1cHg7fQ0KXV0+PC9zdHlsZT4NCg0KICAgIDxyZWN0IGNsYXNzPSJCRyIgeD0iMCIgeT0iMjciIHdpZHRoPSI0ODMiIGhlaWdodD0iNjIiLz4NCiAgICA8cmVjdCBpZD0iYm9yZGVyIiB4PSIwLjM3NSIgeT0iMC4zNzUiIHdpZHRoPSI0ODIuOTg0IiBoZWlnaHQ9Ijg5LjI1IiBjbGFzcz0iTCIvPg0KICAgIDxnIGlkPSJ0aXRsZWJhciI+DQogICAgICAgIDxwYXRoIGlkPSJzeXMiIGNsYXNzPSJMIiBkPSJNNDI3LjQxMSwxMC43MjhsMCw2Ljg3NWw2LjUsLTBsMC4yNSwtNi44NzVsLTYuNzUsLTBabS0zMywzLjQzN2w2LDBtNjEuNSwtMy40MzdsNy4yNSw2Ljg3NW0wLC02Ljg3NWwtNi4yNSw2Ljg3NSIvPg0KICAgICAgICA8ZyBpZD0ibG9nbyI+DQogICAgICAgICAgICA8cGF0aCBkPSJNOS42MTEsMTUuNjYybC0xLjA4NiwwbC0xLjAyOSw0LjM0M2wxMC44LDAuMDczbC0wLjk1MiwtNC40MTZsLTEuMjM5LDBjMCwwIC0xLjEwNCwxLjc0MSAtMi45NTUsMS43NzNjLTIuNDIsMC4wNDMgLTMuNTM5LC0xLjc3MyAtMy41MzksLTEuNzczWiIgY2xhc3M9Ik9GIi8+DQogICAgICAgICAgICA8cGF0aCBkPSJNOS43MzksMTYuMTFsLTAuMzkzLDEuNTE3Yy0wLDAgMS4wMzksMS4wNjUgMy42MDgsMS4wMTVjMi41MDksLTAuMDUgMy43MSwtMS4zMjYgMy43MSwtMS4zMjZsLTAuNTA2LC0xLjI5NiIgc3R5bGU9ImZpbGw6bm9uZTtzdHJva2U6I2FjNDAwMDtzdHJva2Utd2lkdGg6MC40NnB4OyIvPg0KICAgICAgICAgICAgPHBhdGggZD0iTTExLjIyNSwxMi4wNDhsMy4zMzQsLTAuMDI4bDAuNjUyLDIuMTQ1bC00LjUxNSwtMGwwLjUyOSwtMi4xMTdaIiBjbGFzcz0iT0YiLz4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik05Ljg4OSwxNS42NjJsMS44NTUsLTYuMjg1bTQuMjUsNi4yODVsLTIuMDQsLTYuMjg1IiBzdHlsZT0iZmlsbDpub25lO3N0cm9rZTojYjBiNGI3O3N0cm9rZS13aWR0aDowLjQ2cHg7Ii8+DQogICAgICAgICAgICA8cGF0aCBkPSJNMTIuMjk2LDcuMzA3bDEuMTQzLDBsMC41MTUsMi4wN2wtMi4yMSwtMC4wMDFsMC41NTIsLTIuMDY5WiIgY2xhc3M9Ik9GIi8+DQogICAgICAgIDwvZz4NCiAgICAgICAgPHRleHQgeD0iMjEuNTkycHgiIHk9IjE4LjQwN3B4IiBjbGFzcz0iRiI+VkNsaXBNYW5nbGVyPC90ZXh0Pg0KICAgIDwvZz4NCiAgICA8ZyAgPg0KICAgICAgICA8cmVjdCB4PSI4Ljk2OSIgeT0iMzEuOTczIiB3aWR0aD0iNDY0LjA0OSIgaGVpZ2h0PSI1My4wNTUiIGNsYXNzPSJUQiIvPg0KICAgICAgICA8cmVjdCB4PSI4Ljk2OSIgeT0iNjYuMDk4IiB3aWR0aD0iMjk5LjQyNCIgaGVpZ2h0PSIxNS4zNjgiIGNsYXNzPSJUQiIvPg0KICAgICAgICA8cmVjdCB4PSIzMTUuMTU2IiB5PSI2Ni4wOTgiIHdpZHRoPSI5OC4wNDkiIGhlaWdodD0iMTUuMzY4IiBjbGFzcz0iQ1RMIi8+DQogICAgICAgIDxyZWN0IHg9IjQxOC4wOTQiIHk9IjY2LjA5OCIgd2lkdGg9IjU0LjkyNCIgaGVpZ2h0PSIxNS4zNjgiIGNsYXNzPSJDVEwiLz4NCg0KICAgICAgICA8dGV4dCB4PSIxMS44NDJweCIgeT0iNDQuNjU3cHgiIGNsYXNzPSJGIj5FbnRlciBmdWxsIHBhdGggdG8gbTN1IHBsYXlsaXN0IHRvIGNyZWF0ZTo8L3RleHQ+DQogICAgICAgIDx0ZXh0IHg9IjExLjg0MnB4IiB5PSI3OS4zNjJweCIgY2xhc3M9IkYiPkM6XFByb2plY3RzXHBsYXlsaXN0c1xteS3vrIFyc3QtcGxheWxpc3QubTN1PC90ZXh0Pg0KICAgICAgICA8dGV4dCB4PSIzNTYuNzI0cHgiIHk9Ijc3LjM2NHB4IiBjbGFzcz0iRiI+T0s8L3RleHQ+DQogICAgICAgIDx0ZXh0IHg9IjQzMC40MTJweCIgeT0iNzcuMzY0cHgiIGNsYXNzPSJGIj5DYW5jZWw8L3RleHQ+DQogICAgPC9nPg0KPC9zdmc+DQoNCg=="
         , ["secnClip"] = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4NCjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDQ4NCAxNTEiIHZlcnNpb249IjEuMSINCiAgICB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciDQogICAgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHhtbDpzcGFjZT0icHJlc2VydmUiDQogICAgeG1sbnM6c2VyaWY9Imh0dHA6Ly93d3cuc2VyaWYuY29tLyIgc3R5bGU9ImZpbGwtcnVsZTpldmVub2RkO2NsaXAtcnVsZTpldmVub2RkO3N0cm9rZS1saW5lY2FwOnJvdW5kO3N0cm9rZS1saW5lam9pbjpyb3VuZDtzdHJva2UtbWl0ZXJsaW1pdDoxLjU7Ij4NCiAgICA8c3R5bGUgdHlwZT0idGV4dC9jc3MiPjwhW0NEQVRBWw0KICAgIC5Ge2ZvbnQtZmFtaWx5OidBcmlhbE1UJywgJ0FyaWFsJywgc2Fucy1zZXJpZjtmb250LXNpemU6MTBweDt9DQogICAgLkx7ZmlsbDpub25lO3N0cm9rZTojMDAwO3N0cm9rZS13aWR0aDowLjc1cHg7fQ0KICAgIC5CR3tmaWxsOiNGMEYwRjA7c3Ryb2tlOm5vbmU7fQ0KICAgIC5UQntmaWxsOiNGRkY7c3Ryb2tlOiM3QTdBN0E7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkNUTHtmaWxsOiNFMUUxRTE7c3Ryb2tlOiNBREFEQUQ7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQpdXT48L3N0eWxlPg0KICAgIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSI0ODMiIGhlaWdodD0iMTUyIiBjbGFzcz0iQkciLz4NCg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSI5LjM1NHB4IiB5PSI5LjY0OXB4Ij5DbGlwPC90ZXh0Pg0KDQogICAgPHJlY3QgaWQ9ImJ0bk1lZGlhU2VsZWN0IiBjbGFzcz0iQ1RMIiB4PSIxMC4xMjUiIHk9IjE1LjQ3MSIgd2lkdGg9IjUzLjI1IiBoZWlnaHQ9IjE1Ljc1Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjIxLjQ2MXB4IiB5PSIyNi43MTRweCI+TWVkaWE8L3RleHQ+DQogICAgPHJlY3QgaWQ9ImJ0bk1lZGlhUGxheSIgY2xhc3M9IkNUTCIgeD0iNDE4LjEyNSIgeT0iMTUuNDcxIiB3aWR0aD0iNTQuNzUiIGhlaWdodD0iMTQuMjUiLz4NCiAgICA8dGV4dCBjbGFzcz0iRiIgeD0iNDM3LjQzOHB4IiB5PSIyNi43MTRweCI+UGxheTwvdGV4dD4NCg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSI5LjU5M3B4IiB5PSI0OC4xMTZweCI+Q2xpcCB0aXRsZTo8L3RleHQ+DQogICAgPHJlY3QgaWQ9InR4dENsaXBUaXRsZSIgY2xhc3M9IlRCIiB4PSI2OS4zNzUiIHk9IjM3Ljk3MSIgd2lkdGg9IjQwMy41IiBoZWlnaHQ9IjEzLjUiLz4NCg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSI5LjU5M3B4IiB5PSI2OS42MTZweCI+R3JvdXA6PC90ZXh0Pg0KICAgIDxnIGlkPSJkZEdyb3VwcyI+DQogICAgICAgIDxyZWN0IGlkPSIiIHg9IjE5Mi44NzUiIHk9IjU2LjcyMSIgd2lkdGg9IjExNSIgaGVpZ2h0PSIxNi41IiBjbGFzcz0iQ1RMIi8+DQogICAgICAgIDxwYXRoIGQ9Ik0zMDAuMDM0LDY4Ljc4MmwzLjMwOCwtNS42NzNsLTYuNjE1LC0wbDMuMzA3LDUuNjczWiIgc3R5bGU9InN0cm9rZTojMDAwO3N0cm9rZS13aWR0aDowLjc1cHg7Ii8+DQogICAgPC9nPg0KICAgIDxyZWN0IGlkPSJ0eHRHcm91cCIgY2xhc3M9IlRCIiB4PSIzMTQuNjI1IiB5PSI1Ny41OTYiIHdpZHRoPSI5Ny41IiBoZWlnaHQ9IjE2LjUiLz4NCiAgICA8cmVjdCBpZD0iYnRuR3JvdXBTZXQiIGNsYXNzPSJDVEwiIHg9IjQxOS42MjUiIHk9IjU4Ljk3MSIgd2lkdGg9IjU0Ljc1IiBoZWlnaHQ9IjE0LjI1Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjQzNy40MzhweCIgeT0iNjkuOTI1cHgiPlNldDwvdGV4dD4NCg0KICAgIDxyZWN0IGlkPSJidG5DbGlwU3RhcnQiIGNsYXNzPSJDVEwiIHg9IjEwLjEyNSIgeT0iODEuNDcxIiB3aWR0aD0iNTMuMjUiIGhlaWdodD0iMTUuNzUiLz4NCiAgICA8dGV4dCBjbGFzcz0iRiIgeD0iMTQuNzExcHgiIHk9IjkyLjY4NHB4Ij5TdGFydC10aW1lPC90ZXh0Pg0KICAgIDxyZWN0IGlkPSJ0eHRDbGlwU3RhcnQiIGNsYXNzPSJUQiIgeD0iNzAuMDkyIiB5PSI3OS45MDciIHdpZHRoPSIxMTciIGhlaWdodD0iMTYuNSIvPg0KICAgIDxyZWN0IGlkPSJidG5DbGlwU3RhcnREZWNyIiBjbGFzcz0iQ1RMIiB4PSIxOTMuNTkyIiB5PSI3OS45MDciIHdpZHRoPSI1NCIgaGVpZ2h0PSIxNi41Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjIxOC44OTlweCIgeT0iOTEuODAzcHgiPi08L3RleHQ+DQogICAgPHJlY3QgaWQ9ImJ0bkNsaXBTdGFydEluY3IiIGNsYXNzPSJDVEwiIHg9IjI1NC4wOTIiIHk9Ijc5LjkwNyIgd2lkdGg9IjU0IiBoZWlnaHQ9IjE2LjUiLz4NCiAgICA8dGV4dCBjbGFzcz0iRiIgeD0iMjc4LjQ2MXB4IiB5PSI5MS44MDNweCI+KzwvdGV4dD4NCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0YXJ0U2VlayIgY2xhc3M9IkNUTCIgeD0iMzE0LjYyNSIgeT0iNzkuOTA3IiB3aWR0aD0iOTcuNSIgaGVpZ2h0PSIxNi41Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjM1MS42ODhweCIgeT0iOTEuOTI1cHgiPlNlZWs8L3RleHQ+DQoNCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0b3AiIGNsYXNzPSJDVEwiIHg9IjEwLjEyNSIgeT0iMTAzLjIyMSIgd2lkdGg9IjUzLjI1IiBoZWlnaHQ9IjE1Ljc1Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjE0LjcxMXB4IiB5PSIxMTQuMTg0cHgiPlN0b3AtdGltZTwvdGV4dD4NCiAgICA8cmVjdCBpZD0idHh0Q2xpcFN0b3AiIGNsYXNzPSJUQiIgeD0iNzAuMDkyIiB5PSIxMDAuNDA3IiB3aWR0aD0iMTE3IiBoZWlnaHQ9IjE2LjUiLz4NCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0b3BEZWNyIiBjbGFzcz0iQ1RMIiB4PSIxOTMuNTkyIiB5PSIxMDAuNDA3IiB3aWR0aD0iNTQiIGhlaWdodD0iMTYuNSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyMTguODk5cHgiIHk9IjExMS44NjhweCI+LTwvdGV4dD4NCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0b3BJbmNyIiBjbGFzcz0iQ1RMIiB4PSIyNTQuMDkyIiB5PSIxMDAuNDA3IiB3aWR0aD0iNTQiIGhlaWdodD0iMTYuNSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyNzguNDYxcHgiIHk9IjExMS44NjhweCI+KzwvdGV4dD4NCiAgICA8cmVjdCBpZD0iYnRuQ2xpcFN0b3BTZWVrIiBjbGFzcz0iQ1RMIiB4PSIzMTQuNjI1IiB5PSIxMDAuNDA3IiB3aWR0aD0iOTcuNSIgaGVpZ2h0PSIxNi41Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjM1MS42ODhweCIgeT0iMTExLjkyNXB4Ij5TZWVrPC90ZXh0Pg0KDQogICAgPHJlY3QgaWQ9ImJ0bkNsaXBQbGF5IiBjbGFzcz0iQ1RMIiB4PSIxMC4xMjUiIHk9IjEyMi43ODIiIHdpZHRoPSI1My4yNSIgaGVpZ2h0PSIxNS43NSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyNi43MTFweCIgeT0iMTM0LjE4NHB4Ij5OZXc8L3RleHQ+DQogICAgPHJlY3QgaWQ9ImJ0bkNsaXBOZXciIGNsYXNzPSJDVEwiIHg9IjcwLjA5MiIgeT0iMTIyLjQwNyIgd2lkdGg9IjExNyIgaGVpZ2h0PSIxNi41Ii8+DQogICAgPHRleHQgY2xhc3M9IkYiIHg9IjExNy40NjFweCIgeT0iMTM0LjE4NHB4Ij5QbGF5PC90ZXh0Pg0KICAgIDxyZWN0IGlkPSJidG5DbGlwQWRkIiBjbGFzcz0iQ1RMIiB4PSIxOTMuNTkyIiB5PSIxMjIuNDA3IiB3aWR0aD0iNTQiIGhlaWdodD0iMTYuNSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyMDUuNDM4cHgiIHk9IjEzNC4xODRweCI+VXBkYXRlPC90ZXh0Pg0KICAgIDxyZWN0IGlkPSJidG5DbGlwVXBkYXRlIiBjbGFzcz0iQ1RMIiB4PSIyNTQuMDkyIiB5PSIxMjIuNDA3IiB3aWR0aD0iNTQiIGhlaWdodD0iMTYuNSIvPg0KICAgIDx0ZXh0IGNsYXNzPSJGIiB4PSIyNzIuMjExcHgiIHk9IjEzNC4xODRweCI+QWRkPC90ZXh0Pg0KDQogICAgPHBhdGggZD0iTTEwLjEyNSwxNDguNDA3bDQ2My40NjcsLTAiIGNsYXNzPSJMIi8+DQogICAgPHBhdGggZD0iTTY5LjEyNSw1LjA3N2w0MDQuNDY3LDAiIGNsYXNzPSJMIi8+ICAgIA0KICAgIDxwYXRoIGQ9Ik0wLDBsMCwxNTAuNzUiIGNsYXNzPSJMIi8+DQogICAgPHBhdGggZD0iTTQ4My43NSwwbDAsMTUwLjc1IiBjbGFzcz0iTCIvPg0KDQo8L3N2Zz4="
-        , ["secnPlaylist"] = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4NCjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDQ4NCA4NiIgdmVyc2lvbj0iMS4xIg0KICAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyINCiAgICB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSINCiAgICB4bWxuczpzZXJpZj0iaHR0cDovL3d3dy5zZXJpZi5jb20vIiBzdHlsZT0iZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1taXRlcmxpbWl0OjEuNTsiPg0KICAgIDxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+PCFbQ0RBVEFbDQogICAgLkJHe2ZpbGw6I0YwRjBGMDtzdHJva2U6bm9uZTt9DQogICAgLkNUTHtmaWxsOiNFMUUxRTE7c3Ryb2tlOiNBREFEQUQ7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkREQXtmaWxsOiMwMDA7c3Ryb2tlOiMwMDA7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkZ7Zm9udC1mYW1pbHk6J0FyaWFsTVQnLCAnQXJpYWwnLCBzYW5zLXNlcmlmO2ZvbnQtc2l6ZToxMHB4O30NCiAgICAuTHtmaWxsOm5vbmU7c3Ryb2tlOiMwMDA7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLk9Ge2ZpbGw6I2YzODAwMDtzdHJva2U6I2YzODAwMDtzdHJva2Utd2lkdGg6MC43NXB4O30NCl1dPjwvc3R5bGU+DQogICAgPHJlY3QgY2xhc3M9IkJHIiB4PSIwIiB5PSIyNyIgd2lkdGg9IjQ4MyIgaGVpZ2h0PSI1NyIvPg0KICAgIDxwYXRoIGlkPSJib3JkZXIiIGNsYXNzPSJMIiBkPSJNMC4zNzUsODEuNTc3bDAsLTgxLjU3N2w0ODIuOTg0LDBsLTAsODEuNTc3Ii8+DQogICAgPGcgaWQ9InRpdGxlYmFyIj4NCiAgICAgICAgPHBhdGggaWQ9InN5cyIgY2xhc3M9IkwiIGQ9Ik00MjcuNDExLDEwLjcyOGwwLDYuODc1bDYuNSwtMGwwLjI1LC02Ljg3NWwtNi43NSwtMFptLTMzLDMuNDM3bDYsMG02MS41LC0zLjQzN2w3LjI1LDYuODc1bTAsLTYuODc1bC02LjI1LDYuODc1Ii8+DQogICAgICAgIDxnIGlkPSJsb2dvIj4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik05LjYxMSwxNS42NjJsLTEuMDg2LDBsLTEuMDI5LDQuMzQzbDEwLjgsMC4wNzNsLTAuOTUyLC00LjQxNmwtMS4yMzksMGMwLDAgLTEuMTA0LDEuNzQxIC0yLjk1NSwxLjc3M2MtMi40MiwwLjA0MyAtMy41MzksLTEuNzczIC0zLjUzOSwtMS43NzNaIiBjbGFzcz0iT0YiLz4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik05LjczOSwxNi4xMWwtMC4zOTMsMS41MTdjLTAsMCAxLjAzOSwxLjA2NSAzLjYwOCwxLjAxNWMyLjUwOSwtMC4wNSAzLjcxLC0xLjMyNiAzLjcxLC0xLjMyNmwtMC41MDYsLTEuMjk2IiBzdHlsZT0iZmlsbDpub25lO3N0cm9rZTojYWM0MDAwO3N0cm9rZS13aWR0aDowLjQ2cHg7Ii8+DQogICAgICAgICAgICA8cGF0aCBkPSJNMTEuMjI1LDEyLjA0OGwzLjMzNCwtMC4wMjhsMC42NTIsMi4xNDVsLTQuNTE1LC0wbDAuNTI5LC0yLjExN1oiIGNsYXNzPSJPRiIvPg0KICAgICAgICAgICAgPHBhdGggZD0iTTkuODg5LDE1LjY2MmwxLjg1NSwtNi4yODVtNC4yNSw2LjI4NWwtMi4wNCwtNi4yODUiIHN0eWxlPSJmaWxsOm5vbmU7c3Ryb2tlOiNiMGI0Yjc7c3Ryb2tlLXdpZHRoOjAuNDZweDsiLz4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik0xMi4yOTYsNy4zMDdsMS4xNDMsMGwwLjUxNSwyLjA3bC0yLjIxLC0wLjAwMWwwLjU1MiwtMi4wNjlaIiBjbGFzcz0iT0YiLz4NCiAgICAgICAgPC9nPg0KICAgICAgICA8dGV4dCB4PSIyMS41OTJweCIgeT0iMTguNDA3cHgiIGNsYXNzPSJGIj5WY2xpcE1hbmdsZXI8L3RleHQ+DQogICAgPC9nPg0KDQogICAgPHJlY3QgeD0iNjkuMzc1IiB5PSI1Ny4wOTYiIHdpZHRoPSIyMzguNSIgaGVpZ2h0PSIxNi41IiBpZD0iZGQiIGNsYXNzPSJDVEwiLz4NCiAgICA8cGF0aCBkPSJNMzAwLjAzNCw2OS4yOTZsMy4zMDgsLTUuNjczbC02LjYxNSwtMGwzLjMwNyw1LjY3M1oiIGNsYXNzPSJEREEiLz4NCiAgICA8cmVjdCB4PSIzMTQuNjI1IiB5PSIzNC45NzEiIHdpZHRoPSI5Ny41IiBoZWlnaHQ9IjE2LjUiIGNsYXNzPSJDVEwiLz4NCiAgICA8cmVjdCB4PSIzMTQuNjI1IiB5PSI1Ny4wOTYiIHdpZHRoPSI5Ny41IiBoZWlnaHQ9IjE2LjUiIGNsYXNzPSJDVEwiLz4NCiAgICA8cmVjdCB4PSI0MTguMTI1IiB5PSI1OC4yMjEiIHdpZHRoPSI1NC43NSIgaGVpZ2h0PSIxNC4yNSIgY2xhc3M9IkNUTCIvPg0KDQogICAgPHRleHQgeD0iMTAuMDgxcHgiIHk9IjQ1Ljk2NHB4IiBjbGFzcz0iRiI+UGxheWxpc3Q8L3RleHQ+DQogICAgPHRleHQgeD0iMzUxLjY4OHB4IiB5PSI0NS45NjRweCIgY2xhc3M9IkYiPlNhdmU8L3RleHQ+DQogICAgPHRleHQgeD0iMzUxLjY4OHB4IiB5PSI2OC45MjVweCIgY2xhc3M9IkYiPk9wZW48L3RleHQ+DQogICAgPHRleHQgeD0iNDM3LjQzOHB4IiB5PSI2OC45MnB4IiBjbGFzcz0iRiI+TmV3PC90ZXh0Pg0KDQogICAgPHBhdGggZD0iTTE1LjU3Nyw4MC43NjhjLTEuOTgsLTIuMzQgLTQuNTYsLTEuMjYyIC01LjI4LDAuODA5IiBjbGFzcz0iTCIvPg0KICAgIA0KICAgIDxwYXRoIGQ9Ik0xNy41NTcsNzguODY5bC0wLjA2LDIuNzA4IiBjbGFzcz0iTCIvPg0KICAgIDxwYXRoIGQ9Ik0xOS43NzcsNzguODY5bC0wLDAuNTc3IiBjbGFzcz0iTCIvPg0KICAgIDxwYXRoIGQ9Ik0xOS43NzcsODAuNTExbC0wLDEuMDY2IiBjbGFzcz0iTCIvPg0KICAgIDxwYXRoIGQ9Ik0yMS42MzYsODEuMDQ0bDMuNjAxLDAiIGNsYXNzPSJMIi8+DQoNCiAgICA8cGF0aCBkPSJNNjkuMTI1LDgxLjU3N2w0MDQuNDY3LDAiIGNsYXNzPSJDVEwiLz4NCjwvc3ZnPg=="
+        , ["secnPlaylist"] = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj4NCjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDQ4NCA4NiIgdmVyc2lvbj0iMS4xIg0KICAgIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyINCiAgICB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSINCiAgICB4bWxuczpzZXJpZj0iaHR0cDovL3d3dy5zZXJpZi5jb20vIiBzdHlsZT0iZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLWxpbmVjYXA6cm91bmQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1taXRlcmxpbWl0OjEuNTsiPg0KICAgIDxzdHlsZSB0eXBlPSJ0ZXh0L2NzcyI+PCFbQ0RBVEFbDQogICAgLkJHe2ZpbGw6I0YwRjBGMDtzdHJva2U6bm9uZTt9DQogICAgLkNUTHtmaWxsOiNFMUUxRTE7c3Ryb2tlOiNBREFEQUQ7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkREQXtmaWxsOiMwMDA7c3Ryb2tlOiMwMDA7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLkZ7Zm9udC1mYW1pbHk6J0FyaWFsTVQnLCAnQXJpYWwnLCBzYW5zLXNlcmlmO2ZvbnQtc2l6ZToxMHB4O30NCiAgICAuTHtmaWxsOm5vbmU7c3Ryb2tlOiMwMDA7c3Ryb2tlLXdpZHRoOjAuNzVweDt9DQogICAgLk9Ge2ZpbGw6I2YzODAwMDtzdHJva2U6I2YzODAwMDtzdHJva2Utd2lkdGg6MC43NXB4O30NCl1dPjwvc3R5bGU+DQogICAgPHJlY3QgY2xhc3M9IkJHIiB4PSIwIiB5PSIyNyIgd2lkdGg9IjQ4MyIgaGVpZ2h0PSI1NyIvPg0KICAgIDxwYXRoIGlkPSJib3JkZXIiIGNsYXNzPSJMIiBkPSJNMC4zNzUsODEuNTc3bDAsLTgxLjU3N2w0ODIuOTg0LDBsLTAsODEuNTc3Ii8+DQogICAgPGcgaWQ9InRpdGxlYmFyIj4NCiAgICAgICAgPHBhdGggaWQ9InN5cyIgY2xhc3M9IkwiIGQ9Ik00MjcuNDExLDEwLjcyOGwwLDYuODc1bDYuNSwtMGwwLjI1LC02Ljg3NWwtNi43NSwtMFptLTMzLDMuNDM3bDYsMG02MS41LC0zLjQzN2w3LjI1LDYuODc1bTAsLTYuODc1bC02LjI1LDYuODc1Ii8+DQogICAgICAgIDxnIGlkPSJsb2dvIj4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik05LjYxMSwxNS42NjJsLTEuMDg2LDBsLTEuMDI5LDQuMzQzbDEwLjgsMC4wNzNsLTAuOTUyLC00LjQxNmwtMS4yMzksMGMwLDAgLTEuMTA0LDEuNzQxIC0yLjk1NSwxLjc3M2MtMi40MiwwLjA0MyAtMy41MzksLTEuNzczIC0zLjUzOSwtMS43NzNaIiBjbGFzcz0iT0YiLz4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik05LjczOSwxNi4xMWwtMC4zOTMsMS41MTdjLTAsMCAxLjAzOSwxLjA2NSAzLjYwOCwxLjAxNWMyLjUwOSwtMC4wNSAzLjcxLC0xLjMyNiAzLjcxLC0xLjMyNmwtMC41MDYsLTEuMjk2IiBzdHlsZT0iZmlsbDpub25lO3N0cm9rZTojYWM0MDAwO3N0cm9rZS13aWR0aDowLjQ2cHg7Ii8+DQogICAgICAgICAgICA8cGF0aCBkPSJNMTEuMjI1LDEyLjA0OGwzLjMzNCwtMC4wMjhsMC42NTIsMi4xNDVsLTQuNTE1LC0wbDAuNTI5LC0yLjExN1oiIGNsYXNzPSJPRiIvPg0KICAgICAgICAgICAgPHBhdGggZD0iTTkuODg5LDE1LjY2MmwxLjg1NSwtNi4yODVtNC4yNSw2LjI4NWwtMi4wNCwtNi4yODUiIHN0eWxlPSJmaWxsOm5vbmU7c3Ryb2tlOiNiMGI0Yjc7c3Ryb2tlLXdpZHRoOjAuNDZweDsiLz4NCiAgICAgICAgICAgIDxwYXRoIGQ9Ik0xMi4yOTYsNy4zMDdsMS4xNDMsMGwwLjUxNSwyLjA3bC0yLjIxLC0wLjAwMWwwLjU1MiwtMi4wNjlaIiBjbGFzcz0iT0YiLz4NCiAgICAgICAgPC9nPg0KICAgICAgICA8dGV4dCB4PSIyMS41OTJweCIgeT0iMTguNDA3cHgiIGNsYXNzPSJGIj5WQ2xpcE1hbmdsZXI8L3RleHQ+DQogICAgPC9nPg0KDQogICAgPHJlY3QgeD0iNjkuMzc1IiB5PSI1Ny4wOTYiIHdpZHRoPSIyMzguNSIgaGVpZ2h0PSIxNi41IiBpZD0iZGQiIGNsYXNzPSJDVEwiLz4NCiAgICA8cGF0aCBkPSJNMzAwLjAzNCw2OS4yOTZsMy4zMDgsLTUuNjczbC02LjYxNSwtMGwzLjMwNyw1LjY3M1oiIGNsYXNzPSJEREEiLz4NCiAgICA8cmVjdCB4PSIzMTQuNjI1IiB5PSIzNC45NzEiIHdpZHRoPSI5Ny41IiBoZWlnaHQ9IjE2LjUiIGNsYXNzPSJDVEwiLz4NCiAgICA8cmVjdCB4PSIzMTQuNjI1IiB5PSI1Ny4wOTYiIHdpZHRoPSI5Ny41IiBoZWlnaHQ9IjE2LjUiIGNsYXNzPSJDVEwiLz4NCiAgICA8cmVjdCB4PSI0MTguMTI1IiB5PSI1OC4yMjEiIHdpZHRoPSI1NC43NSIgaGVpZ2h0PSIxNC4yNSIgY2xhc3M9IkNUTCIvPg0KDQogICAgPHRleHQgeD0iMTAuMDgxcHgiIHk9IjQ1Ljk2NHB4IiBjbGFzcz0iRiI+UGxheWxpc3Q8L3RleHQ+DQogICAgPHRleHQgeD0iMzUxLjY4OHB4IiB5PSI0NS45NjRweCIgY2xhc3M9IkYiPlNhdmU8L3RleHQ+DQogICAgPHRleHQgeD0iMzUxLjY4OHB4IiB5PSI2OC45MjVweCIgY2xhc3M9IkYiPk9wZW48L3RleHQ+DQogICAgPHRleHQgeD0iNDM3LjQzOHB4IiB5PSI2OC45MnB4IiBjbGFzcz0iRiI+TmV3PC90ZXh0Pg0KDQogICAgPHBhdGggZD0iTTE1LjU3Nyw4MC43NjhjLTEuOTgsLTIuMzQgLTQuNTYsLTEuMjYyIC01LjI4LDAuODA5IiBjbGFzcz0iTCIvPg0KICAgIA0KICAgIDxwYXRoIGQ9Ik0xNy41NTcsNzguODY5bC0wLjA2LDIuNzA4IiBjbGFzcz0iTCIvPg0KICAgIDxwYXRoIGQ9Ik0xOS43NzcsNzguODY5bC0wLDAuNTc3IiBjbGFzcz0iTCIvPg0KICAgIDxwYXRoIGQ9Ik0xOS43NzcsODAuNTExbC0wLDEuMDY2IiBjbGFzcz0iTCIvPg0KICAgIDxwYXRoIGQ9Ik0yMS42MzYsODEuMDQ0bDMuNjAxLDAiIGNsYXNzPSJMIi8+DQoNCiAgICA8cGF0aCBkPSJNNjkuMTI1LDgxLjU3N2w0MDQuNDY3LDAiIGNsYXNzPSJDVEwiLz4NCjwvc3ZnPg=="
         , ["warningIcon"] = "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+PCFET0NUWVBFIHN2ZyBQVUJMSUMgIi0vL1czQy8vRFREIFNWRyAxLjEvL0VOIiAiaHR0cDovL3d3dy53My5vcmcvR3JhcGhpY3MvU1ZHLzEuMS9EVEQvc3ZnMTEuZHRkIj48c3ZnIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIHZpZXdCb3g9IjAgMCAzNSAzOSIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4bWw6c3BhY2U9InByZXNlcnZlIiB4bWxuczpzZXJpZj0iaHR0cDovL3d3dy5zZXJpZi5jb20vIiBzdHlsZT0iZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1taXRlcmxpbWl0OjI7Ij48Zz48cGF0aCBkPSJNMC42MiwzMC4zNDFsMTEuMzYxLC0xOS42NDJsMC4wNDUsLTAuMDcxYzAuNDcyLC0wLjc2OSAxLjEwOSwtMS40MjQgMS44NjUsLTEuOTE2YzAuNzE3LC0wLjQ2IDEuNTQ5LC0wLjcwNyAyLjQwMSwtMC43MTJjMC44NTUsLTAuMDAxIDEuNjkzLDAuMjQ2IDIuNDExLDAuNzEyYzAuNzUzLDAuNDk0IDEuMzg2LDEuMTUgMS44NTIsMS45MjFjMC4wMzQsMC4wNTcgMC4wNjUsMC4xMTIgMC4wOTUsMC4xNjdsMTEuMTc2LDE5LjQwOWwwLjA2NCwwLjExNmMwLjQxOCwwLjgzNyAwLjYzMywxLjc2MSAwLjYyNywyLjY5N2MtMC4wMDYsMC43NzMgLTAuMjAzLDEuNTMyIC0wLjU3NCwyLjIxYy0wLjQxOCwwLjc1NiAtMS4wNTksMS4zNjYgLTEuODM0LDEuNzQ2Yy0wLjA1MSwwLjAyNyAtMC4xMDQsMC4wNDggLTAuMTU0LDAuMDY5Yy0wLjc1OSwwLjMzMSAtMS41ODMsMC40ODkgLTIuNDExLDAuNDYzbC0yMy4wNTgsMGMtMC41NjEsLTAuMDA0IC0xLjExNiwtMC4xMDcgLTEuNjQxLC0wLjMwNGMtMC44MzQsLTAuMzE2IC0xLjU1MSwtMC44ODIgLTIuMDUzLC0xLjYyYy0wLjUwNiwtMC43NDggLTAuNzgyLC0xLjYyOSAtMC43OTQsLTIuNTMyYy0wLjAxMywtMC43OTEgMC4xMjgsLTEuNTc3IDAuNDE1LC0yLjMxM2MwLjA1MywtMC4xNDEgMC4xMjEsLTAuMjc1IDAuMjA0LC0wLjRsMC4wMDMsMFoiIHN0eWxlPSJmaWxsOiMwMTAxMDE7ZmlsbC1ydWxlOm5vbnplcm87Ii8+PHBhdGggZD0iTTIuMzc5LDMxLjQ4N2wxMS40MTIsLTE5Ljc0YzEuMzg3LC0yLjE4MyAzLjU4MywtMi4yMzkgNC45OTQsMGwxMS4yMjgsMTkuNTAyYzAuODk4LDEuODAyIDAuNDUzLDQuMjM0IC0yLjQ2OSw0LjE3M2wtMjIuODg2LDBjLTEuOTIxLDAuMDQ4IC0zLjE2LC0xLjYzOCAtMi4yNzksLTMuOTM1WiIgc3R5bGU9ImZpbGw6I2ZmZjsiLz48cGF0aCBkPSJNMTUuMjMzLDMwLjE3MmMwLjI0NCwtMC4yNDIgMC41NjYsLTAuMzkgMC45MDgsLTAuNDE4YzAuMjE2LC0wLjAxNSAwLjQzMywwLjAxNyAwLjYzNSwwLjA5NWMwLjE5OSwwLjA3NiAwLjM3OSwwLjE5MyAwLjUyOSwwLjM0NGMwLjM0OCwwLjM0NSAwLjUwMSwwLjg0MiAwLjQwOCwxLjMyM2MtMC4wMjQsMC4xMjMgLTAuMDYxLDAuMjQzIC0wLjExMSwwLjM1N2MtMC4yNDUsMC41MzggLTAuNzkxLDAuODc5IC0xLjM4MiwwLjg2M2MtMC4yMDcsLTAuMDA1IC0wLjQxMiwtMC4wNTMgLTAuNiwtMC4xNGMtMC4zMzIsLTAuMTU4IC0wLjU5MywtMC40MzYgLTAuNzI4LC0wLjc3OGMtMC4wNDYsLTAuMTA4IC0wLjA3OCwtMC4yMjEgLTAuMDk2LC0wLjMzNmMtMC4wMTgsLTAuMTE1IC0wLjAyMywtMC4yMzEgLTAuMDE1LC0wLjM0N2MwLjAyMSwtMC4xODMgMC4wNzIsLTAuMzYyIDAuMTUsLTAuNTI5YzAuMDcxLC0wLjE1NyAwLjE3NCwtMC4yOTggMC4zMDIsLTAuNDEzbDAsLTAuMDIxWm0yLjE1NywtMi43MWMtMC4wNSwxLjI2NyAtMi4xOTksMS4yNyAtMi4yNDcsLTBjLTAuMjE3LC0yLjE3MyAtMC43NzMsLTcuNzY1IC0wLjc1NywtOS44MDVjMC4wMTksLTAuNjMgMC41MywtMS4wMDMgMS4yMDcsLTEuMTQ2YzAuNDM3LC0wLjA4NyAwLjg4NiwtMC4wODcgMS4zMjMsLTBjMC42OTEsMC4xNDggMS4yMzEsMC41MjkgMS4yMzEsMS4xNzVsLTAsMC4wNjNsLTAuNzU3LDkuNzEzWiIgc3R5bGU9ImZpbGw6IzAxMDEwMTtmaWxsLXJ1bGU6bm9uemVybzsiLz48L2c+PC9zdmc+"
     }
 end

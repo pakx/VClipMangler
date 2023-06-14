@@ -1,14 +1,29 @@
 # devlog
 
+## 20230614
+
+- expanded notes in #20230520 (v0.0.1)
+- edited notes in #20230603 re issue 7
+- renamed all occurrances of "VclipMangler" -> "VClipMangler"; should've paid better attention to consistent naming at the outset :/
+- renamed test/app.lua -> test/tests.lua (the thinking behind the original name was that "app.lua" would test overall app or use cases; more narrowly named modules would test subparts; now looks like 1 file will suffice)
+- renamed most current tests to TestUsecase...
+- tests.lua; added tests for all actions.{public functions} not covered in existing TestUsecase* tests
+- tests.lua; added TestCoverage() to test that VClipMangler public functions are covered; see function comments
+- edits re using external script to maintain window size
+  - added ini-settings `cmdOnActivate`, `cmdOnClose` for os commands to run when extension is activated or closed
+  - used to start/stop an autohotkey script to watch/maintain window size
+  - see readme.md#maintaining-window-size
+- updated to v0.5.0
+
 ## 20230603
 
 - fixed [Sometimes on clicking "Add" both newly-added and added-just-previously clips are set to same title, etc](https://github.com/pakx/VClipMangler/issues/7), as follows:
-  - the underlying reason for this was due the current clip, i.e. mdl.clip, being added directly to the clips-list
-  - thus after a first Add, mdl.clip pointed to the newly-added clip in the clips-list
-  - further edits to the current clip affected mdl.clip (aka the clip in clips-list)
-  - the next Add, depending on forgoing edits, resulted in the second-added clip and the first-added clip above both showing similar edits
-  - the "sometimes" in the issue depended on whether view-edits invoked acts.updateClip() before the Add button were clicked: if it did, such as when using the time-adjust buttons, it resulted in mdl.clip being modified (and reflected in the clip in the clips-list); if acts.updateClip() were not called before the Add button (e.g. times were typed into the textbox) the issue didn't show
-  - addressed as follows: acts.updateClip(): on saveToList, after successful save set mdl.clip to a copy of what was saved; note that on Select we were already setting mdl-clip to a copy of the selected clip rather than to the clip itself
+  - the underlying cause for this was, on Add, the current clip, i.e. mdl.clip, being added to the clips-list and mdl.clip continuing to point to it
+  - thus after a first Add, mdl.clip pointed to the newly-added clip (say, "clip-1") in the clips-list
+  - further edits to the current clip affected mdl.clip (and hence also clip-1)
+  - the next Add, depending on interim actions, resulted in the second-added clip ("clip-2") and clip-1 both showing similar edits; i.e., clip-1 is added to the clips-list, further edits are made to mdl.clip (which clip-1 doesn't yet reflect visually as the clips-list hasn't been refreshed), then a clip-2 w/ new id is added, the clips-list is refreshed, shows clip-2 ... and clip-1 w/ very similar edits, as if clicking Add updated clip-1
+  - the "sometimes" in the issue depended on whether view-interactions invoked acts.updateClip() before the Add button were clicked: if it did, such as when using the time-adjust buttons, it resulted in mdl.clip being modified (and being reflected in clip-1 in the clips-list); if acts.updateClip() were not called before the Add button (e.g. only the title were edited, or times were typed into textboxs) the issue didn't manifest
+  - addressed as follows: acts.updateClip(): on saveToList, after successful save set mdl.clip to a copy of what was saved; note that we were already doing similar on Select -- setting mdl-clip to a copy of the selected clip rather than to the clip itself
 - updated TestsB04_newClip(); prior version, which shouldn't have passed, didn't have `asNew=true` in the call following "update clip w/ all fields; should succeed"
 - showPlaylist(): edited sorting to be case-insensitive (sort everything lowercase)
 - app.utils.dump(): simplified
@@ -57,7 +72,7 @@
   > lua debug: cachedir C:\Users\pakx\AppData\Roaming\vlc  
 - changed ini-file location from `userdatadir` to `homedir`, as ini less likely to be deleted from there; added logic to check both places; @see acts.initializeApp(); edited help
 - rearranged app.utils functions into alphabetical order
-- edited tests/_utils.lua to contain only those functions not already in VclipMangler.lua/app.utils (or not accessible at time-of-call)
+- edited tests/_utils.lua to contain only those functions not already in VClipMangler.lua/app.utils (or not accessible at time-of-call)
 - added to test/_utils.lua functions that are Windows-specific; generalize or use a library if later warranted
 - fixed app.utils.createRollingBackup() to handle filenames containing Lua regex magic chars
 - added test for createRollingBackup() wrt mdl.appCfg.backupCount
@@ -65,10 +80,10 @@
 - account for long media uri, such as from youtube, by displaying a truncated version; see formatMediaUri()
 - edited showPlaylists() to sort case-insensitive
 - added optional ini-file setting `backupFolder`; defaults to `playlistFolder`; this is the folder into which playlist backups will be placed (just so playlistFolder looks less cluttered); added tests; while it would be better to default backupFolder to playlistFolder/bak, Lua has no native facilities for folder-management to create that "bak" folder, and vlc's own vlc.io.mkdir seems ureliable; e.g.
-  > lua warning: Error while running script C:\ProgramFiles\vlc-3.0.18\lua\extensions\VclipMangler.lua, function (null)(): ...gramFiles\vlc-3.0.18\lua\extensions\VclipMangler.lua:1135: VLC lua error in file /builds/videolan/vlc/extras/package/win32/../../../modules/lua/libs/io.c line 247 (function vlclua_mkdir)
+  > lua warning: Error while running script C:\ProgramFiles\vlc-3.0.18\lua\extensions\VClipMangler.lua, function (null)(): ...gramFiles\vlc-3.0.18\lua\extensions\VClipMangler.lua:1135: VLC lua error in file /builds/videolan/vlc/extras/package/win32/../../../modules/lua/libs/io.c line 247 (function vlclua_mkdir)
 - added boolean `clip.hasEditsInVw` to track if curtrent clip in view has edits; this flag is cleared when clip is saved to list (even if not yet to file) via the "Update" button; this helps show the clip-secn as saved, while clips in the clips-secn show edits; `clip.hasEdits` keeps its old behavior -- it persists until the playlist is saved
-- added app.utils.checkForUpdates(); uses github api to fetch `/releases` and parses content; (fyi tags: <https://api.github.com/repos/pakx/VClipMangler/tags>, releases: <https://api.github.com/repos/pakx/VclipMangler/releases>); simply checking the version of the VclipMangler.lua source file, or even checking tags, would be easier; unfortunately, checking releases is the "right" thing to do, as both the forgoing may have non-release versions
-- edited incorrect casing in project-name references from "VclipMangler" to "VClipMangler"; that works for browsing to the repo, but using the releases api, etc needs the correction
+- added app.utils.checkForUpdates(); uses github api to fetch `/releases` and parses content; (fyi tags: <https://api.github.com/repos/pakx/VClipMangler/tags>, releases: <https://api.github.com/repos/pakx/VClipMangler/releases>); simply checking the version of the VClipMangler.lua source file, or even checking tags, would be easier; unfortunately, checking releases is the "right" thing to do, as both the forgoing may have non-release versions
+- edited incorrect casing in project-name references from "VClipMangler" to "VClipMangler"; that works for browsing to the repo, but using the releases api, etc needs the correction
 - added changelog.md
 - clerical edits to comments, help
 - updated to version 0.3.0
@@ -77,7 +92,7 @@
 
 - added devlog.md
 - updated to VLC 3.0.18
-- installed <https://marketplace.visualstudio.com/items?itemName=appulate.filewatcher>, to copy VclipMangler.lua from repo to extensions folder on save
+- installed <https://marketplace.visualstudio.com/items?itemName=appulate.filewatcher>, to copy VClipMangler.lua from repo to extensions folder on save
 - edited test/app.lua to use VclipManager.ini from repo folder
 - fixed [Move Select button to from the Clip section to the clips-list section](https://github.com/pakx/VClipMangler/issues/1); moved Select button, updated svg used in Help
 - minor edits to readme, help
@@ -119,7 +134,7 @@
         , actions   = createActions(model)
         , view      = createView(model, actions)
 
-        -- with the benefit of hindsight (at the time this part of the devlog is written; see #202306..)
+        -- with the benefit of hindsight (at the time this part of the devlog is written; see #202306XX v0.4.3)
         -- we have the following properties as well
 
         , utils     = {...} -- utilities such as copyFile(), fileExists()
@@ -129,31 +144,62 @@
     }
     ```
 
-- code conventions
-  - place function-describing comments within the function, using a 3-character version of comment characters
-  - use comma-first; similarly, if breaking up an expression involving operators, start the continuation line with an operator
+### code conventions
 
-- Resources:
+- use camelCase (despite linter seeming to expect ucase for globals)
+- place function-describing comments within the function, using a 3-character version of comment characters
+- use comma-first; similarly, if breaking up an expression involving operators, start the continuation line with an operator
 
-  - [Lua 5.1 Reference Manual](http://www.lua.org/manual/5.1/)
-  - [Programming in Lua (first edition)](https://www.lua.org/pil/contents.html#P1)
-  - [Lua Tutorial](https://www.tutorialspoint.com/lua/index.htm)
-  - [Lua-users wiki](http://lua-users.org/) has useful material, though not easily discovered; among these
-    - [Tutorial Directory](http://lua-users.org/wiki/TutorialDirectory)
-    - [Table Serialization](http://lua-users.org/wiki/TableSerialization)
-  - [Lua Cookbook](https://stevedonovan.github.io/lua-cookbook/index.html)
+### testing
 
-  - [LuaUnit](https://github.com/bluebird75/luaunit) testing library; has link to separate documentation site
+- from testing libs listed at [Unit Testing](http://lua-users.org/wiki/UnitTesting), [luaunit](https://github.com/bluebird75/luaunit) seems a decent fit: supports Lua 5.1, and no dependencies
+- luaunit's support for test suites seems incomplete: it has per-test setup/teardown, but no per-suite setup/teardown
+- testing public functions should be straightforward
+- to test private (i.e. "local") functions, we could "surface" them to be publicly visible during testing. Here's one way via reflection:
 
-  - [Mefteg/basic.lua : a basic Lua extension](https://gist.github.com/Mefteg/18463a9cd362ff1f1ba6ff57cb7d4547)
-  - [Scripting VLC in lua](https://forum.videolan.org/viewforum.php?f=29) user discussion forum that I haven't been able to join due its overzealous bot-filtering/IP-banning
-  - [Instructions to code your own VLC Lua scripts and extensions](https://github.com/videolan/vlc/tree/master/share/lua) ; this may not be for the correct VLC version
-  - [VLC Lua Docs](https://vlc.verg.ca/); see the section on Extensions; source seems to be [verghost/vlc-lua-docs](https://github.com/verghost/vlc-lua-docs/blob/master/index.md)
+  ```lua
+    -- To test functions local to app.createActions(),
+    -- place the following in that function before the line `return acts`
+    if app.context and app.context.testing then
+        local _m, _i = acts, 1
+        _m._locals = {} -- <-- NB
+        while true do
+            local name, value = debug.getlocal(1, _i)
+            if not name then break end
+            _m._locals[name] = value
+            _i = _i + 1
+        end
+    end
 
-  - [M3U file format](https://en.wikipedia.org/wiki/M3U)
-  - [XSPF(“spiff”) spec](https://www.xspf.org/spec#411214-tracklist)
+    -- then in tests.lua:
+    local app = require("VClipMangler")
+    app.setContext(ctx)
+    local acts = app.createActions(app.createModel())
+    -- get/call surfaced local functions
+    local fn = acts._locals["readAppIni"]
+    fn(path-to-ini)
+  ```
 
-  - how to deploy an extension to videolan isn't immediately obvious; eventually found these:
-    - <https://forum.videolan.org/viewtopic.php?t=98644#p522451>
-    - [How do I submit a VLC extension to addons.videolan.org?](https://forum.opendesktop.org/t/how-do-i-submit-a-vlc-extension-to-addons-videolan-org/20678)
-  
+### resources
+
+- [Lua 5.1 Reference Manual](http://www.lua.org/manual/5.1/)
+- [Programming in Lua (first edition)](https://www.lua.org/pil/contents.html#P1)
+- [Lua Tutorial](https://www.tutorialspoint.com/lua/index.htm)
+- [Lua-users wiki](http://lua-users.org/) has useful material, though not easily discovered; among these
+- [Tutorial Directory](http://lua-users.org/wiki/TutorialDirectory)
+- [Table Serialization](http://lua-users.org/wiki/TableSerialization)
+- [Lua Cookbook](https://stevedonovan.github.io/lua-cookbook/index.html)
+
+- [LuaUnit](https://github.com/bluebird75/luaunit) testing library; see repo for link to separate documentation site
+
+- [Mefteg/basic.lua : a basic Lua extension](https://gist.github.com/Mefteg/18463a9cd362ff1f1ba6ff57cb7d4547)
+- [Scripting VLC in lua](https://forum.videolan.org/viewforum.php?f=29) user discussion forum that I haven't been able to join due its overzealous bot-filtering/IP-banning
+- [Instructions to code your own VLC Lua scripts and extensions](https://github.com/videolan/vlc/tree/master/share/lua) ; this may not be for the correct VLC version
+- [VLC Lua Docs](https://vlc.verg.ca/); see the section on Extensions; source seems to be [verghost/vlc-lua-docs](https://github.com/verghost/vlc-lua-docs/blob/master/index.md)
+
+- [M3U file format](https://en.wikipedia.org/wiki/M3U)
+- [XSPF(“spiff”) spec](https://www.xspf.org/spec#411214-tracklist)
+
+- how to deploy an extension to videolan isn't immediately obvious; eventually found these:
+- <https://forum.videolan.org/viewtopic.php?t=98644#p522451>
+- [How do I submit a VLC extension to addons.videolan.org?](https://forum.opendesktop.org/t/how-do-i-submit-a-vlc-extension-to-addons-videolan-org/20678)
